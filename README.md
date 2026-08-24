@@ -8,7 +8,7 @@ Be the operator single source for setup, deployment, validation, backup, upgrade
 - Inventory every URL, API key, secret, DNS, TLS, firewall, and identity setting
 - Orchestrate released images with Docker Compose
 - Run Postgres migrations and NocoDB initialization
-- Install HostedPulse assets and configure/test the signed LiveKit webhook
+- Install OfficePulse assets and configure/test the signed LiveKit webhook
 
 ## Stack
 
