@@ -4,7 +4,7 @@ Status: Draft for autonomous project implementation
 Telephony: OfficePulse / Asterisk 20.9.2  
 Voice agent: LiveKit  
 Handset: Grandstream GXV3450 / Android 11  
-Existing integrations: LocalSplash CRM, EchoWeb, EchoDatabase, EchoService  
+Existing integrations: LocalSplash CRM, LocalSplash `id` (identity), EchoService  
 Optional realtime provider: Pusher Channels
 
 ## 1. Objective
@@ -23,8 +23,7 @@ The system consists of independently buildable projects joined by versioned cont
 - **OfficePulse call recording** remains authoritative for recording media, disclosure playback, file lifecycle, and any existing recording retention controls. Aida does not make a second recording.
 - **LiveKit** supplies realtime media and voice-agent facilities. It is not the system of record for profiles or calls.
 - **LocalSplash CRM** supplies onboarding defaults. CRM values retain source metadata and can be overridden by precise Aida configuration.
-- **EchoDatabase** contains existing organization, user, identity, membership, session, UISP SSO, SMS-number, and carrier data.
-- **EchoWeb** supplies existing Google, Microsoft, and UISP sign-in and administration patterns.
+- **`id`** is the LocalSplash identity service at `id.localsplash.ai`. It owns user accounts, organizations, sign-in (including Google, Microsoft, and UISP), sessions, and revocation; no Aida component keeps a second password or identity database.
 - **EchoService** is Echo's messaging service layer.
 - **Pusher Channels** supplies lightweight call-arrival and call-state notifications. Live details and stream credentials come from AidaControl.
 
@@ -64,9 +63,10 @@ All Aida-owned public services use `*.aida.relevant.com`. One wildcard DNS recor
 | Hostname | Service |
 |---|---|
 | `app.aida.relevant.com` | Administration application |
-| `api.aida.relevant.com` | Browser/handset REST API and signed LiveKit webhook receiver |
+| `api.aida.relevant.com` | Browser/handset REST API, signed LiveKit webhook receiver, and published contract artifacts under `/v1/contracts/...` |
+| `id.localsplash.ai` | LocalSplash identity service (`id`). Its `PARENT_DOMAIN` is the apex `localsplash.ai` — independent of Aida's wildcard DNS record, certificate, and ingress |
 
-Ingress routes by hostname to internal services. The POC and foreseeable deployment use LiveKit Cloud for media and realtime transcript/control data. Pusher provides call-arrival notifications. Aida does not operate a first-party WebSocket service and no `realtime.aida.relevant.com` DNS record is required.
+Ingress routes by hostname to internal services. Published contract artifacts (OpenAPI, AsyncAPI, JSON Schemas) are served under `api.aida.relevant.com/v1/contracts/...` — a path on the existing API hostname matching the `/v1` versioning scheme; there is deliberately no separate `contracts.aida.*` hostname or DNS entry. The `id` service is reached at its own apex-domain hostname and is not behind Aida's ingress. The POC and foreseeable deployment use LiveKit Cloud for media and realtime transcript/control data. Pusher provides call-arrival notifications. Aida does not operate a first-party WebSocket service and no `realtime.aida.relevant.com` DNS record is required.
 
 A first-party realtime gateway is outside the planned system. It would be reconsidered only if Aida intentionally replaces LiveKit Data for application events because of a demonstrated requirement such as unsupported client behavior, contractual data-residency restrictions, or measured scale/cost constraints. Such a change requires a new architecture revision and is not implied by this specification.
 
@@ -99,7 +99,7 @@ Responsibilities:
 - OfficePulse and agent event ingestion;
 - transactional call-state/event persistence, replay, and LiveKit Data publication;
 - LocalSplash CRM default import and override tracking;
-- Echo authentication/token exchange;
+- validation of staff-session tokens from a single configured issuer (self-issued by AidaAdmin, whose users authenticate against `id`);
 - reconciliation of orphan/inconsistent resources.
 
 AidaControl is also the source of truth for shared contracts and both Aida-owned data stores. Its repository contains:
@@ -172,7 +172,7 @@ Responsive tenant/staff application at `app.aida.relevant.com`.
 
 It manages profiles, publishing, routes, devices, retention, platform appearance settings, and permitted call views. It displays CRM defaults separately from effective overrides. It validates destinations through AidaControl and never accesses NocoDB, ARI, or Asterisk configuration directly.
 
-The POC is a separate application linked from EchoWeb and sharing Echo authentication through token exchange. EchoWeb may later embed the same Aida screens or navigation. A centralized OAuth/OIDC project is a planned successor, not a prerequisite for the POC.
+AidaAdmin authenticates its users against the LocalSplash identity service (`id`, at `id.localsplash.ai`) using the flow in §13, holds its own persistent session, and self-issues the short-lived staff tokens AidaControl validates. It keeps no password store of its own.
 
 Tests cover accessible components, keyboard navigation, validation/conflict/forbidden states, draft/publish/rollback, CRM override/reset, staff tenant context, cross-tenant leakage, and a minimal browser workflow with fake APIs.
 
@@ -200,11 +200,11 @@ Documentation-and-automation repository rather than an application service. It i
 It contains:
 
 - dependency/version matrix and supported deployment topology;
-- complete environment-variable and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB, EchoWeb token exchange, Firebase if used, CRM when enabled, and OfficePulse service credentials;
+- complete environment-variable and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB, the `id` client registration for AidaAdmin, the persisted staff-token issuer/secret pair shared between AidaAdmin and AidaControl (never generated at boot), Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
 - public wildcard and private OfficePulse DNS, TLS, firewall, mTLS, and ingress instructions;
 - Docker Compose orchestration referencing released project images;
 - scripts that run AidaControl's Postgres migrations and invoke its NocoDB schema commands to create/validate/seed the configuration base;
-- EchoWeb configuration and migration instructions;
+- `id` client registration and configuration instructions for AidaAdmin;
 - OfficePulse integration installation order and verification;
 - health-check, smoke-test, backup, restore, upgrade, and rollback runbooks;
 - LiveKit Cloud webhook creation, signing-key selection, test-delivery, rotation, and troubleshooting instructions;
@@ -219,10 +219,10 @@ There is no AidaSystemTest repository in the initial design. Every source reposi
 ### 6.1 Tenants and external references
 
 - `tenant`: UUID, status, display name, timestamps.
-- `tenant_external_reference`: tenant, system (`echo`, `localsplash_crm`, `uisp`), external ID, metadata; unique by system/external ID.
+- `tenant_external_reference`: tenant, system (`id`, `localsplash_crm`), external ID, metadata; unique by system/external ID.
 - `platform_appearance`: singleton POC settings for brand name, agent display name, colors, uploaded logo/icon references, and support/legal URLs.
 
-Echo `iOrgId` is an external reference, not Aida's primary key.
+`id`'s organization identifier is an external reference, not Aida's primary key. There is deliberately no separate `uisp` system value: UISP sign-in flows through `id`, and `id`'s own user identifier (`iUserId`) supersedes a direct UISP linkage.
 
 ### 6.2 Profiles and inherited configuration
 
@@ -480,6 +480,8 @@ These are project-owned recordings, not assumed Asterisk built-ins. `OfficePulse
 
 Writes use validation, tenant authorization, rate limiting, auditing, ETag/revision concurrency, and idempotency where appropriate. Browser cookie writes require CSRF protection. Handsets use short-lived tokens with revocation.
 
+AidaAdmin's identity integration adds two endpoints of its own — the `POST /id/events` revocation-webhook receiver and the boot-time `GET /api/events?since=` catch-up client (§13) — and both belong to AidaAdmin's surface, not AidaControl's public API.
+
 The LiveKit webhook route is the sole exception to Aida user/workload-token authentication on the public API. It accepts only `application/webhook+json`, preserves the raw body and `Authorization` header for `WebhookReceiver`, performs no CSRF check, and applies the verification, deduplication, and event rules in §9.3.
 
 ### 11.2 Private API at `officepulse-api.relevant.com`
@@ -503,25 +505,27 @@ Route validation confirms normalized/unique DID, published profile, OfficePulse 
 
 Staff administration uses a separately initiated short-lived privileged session, explicit tenant selection, a persistent context banner, and full audit. Staff permission derives from a verified role/group or explicit allowlist—not an unverified email suffix.
 
-## 13. Echo integration
+## 13. Identity integration (`id`)
 
-Repository review found:
+Identity for the Aida Voice Platform is the LocalSplash identity service, **`id`**, at `id.localsplash.ai` on the apex `localsplash.ai` domain — independent of Aida's wildcard DNS, certificate, and ingress (§4.1). `id` owns user accounts, organizations, sign-in (Google, Microsoft, UISP), sessions, and revocation. No Aida component keeps a second password or identity database.
 
-- EchoDatabase organization, user, identity, membership, session, and UISP nonce tables;
-- EchoWeb Google/Microsoft OAuth, UISP HMAC SSO/replay protection, organization provisioning, sessions, business-number selection, and short-lived staff context;
-- EchoWeb sends messaging operations through EchoService while currently accessing authentication data directly.
+### 13.1 AidaAdmin ↔ `id`
 
-Initial integration:
+- **Registration.** AidaAdmin registers itself with `id` on boot as a client application, supplying its callback and webhook URLs. Registration is idempotent: a restart re-asserts the same registration rather than creating a new one.
+- **Sign-in.** AidaAdmin sends the browser to `id`'s `/authorize`, receives an authorization code on its callback, and redeems it with `POST /api/token`. AidaAdmin then holds a persistent session for the user; `id` is not consulted on every request.
+- **Revocation, two paths that must both exist.** `id` pushes revocation and identity-change events to AidaAdmin's `POST /id/events` webhook receiver. Because a webhook can be missed while AidaAdmin is down, AidaAdmin also calls `id`'s `GET /api/events?since=<cursor>` on boot to catch up on anything delivered while it was away, then resumes webhook consumption. A revoked user's AidaAdmin session and any outstanding staff tokens for it are invalidated.
+- These two endpoints — the webhook receiver and the catch-up client — belong to **AidaAdmin's** surface, not AidaControl's public API (§11.1).
 
-- create an Aida `tenantId` and link Echo `auth_tbl_Org.iOrgId` as an external reference;
-- modify EchoWeb to issue a signed, short-lived Aida token through a dedicated token-exchange endpoint;
-- include user, Aida tenant, membership, permissions, session ID, issuer/audience, issue/expiry, and token ID;
-- validate tokens and perform Aida authorization in AidaControl;
-- define permissions such as `voice.routes.manage`, `voice.profiles.manage`, `voice.calls.control`, and `voice.calls.read`.
+### 13.2 AidaAdmin → AidaControl
 
-Echo's SMS business-phone table is not Aida voice routing. It may seed suggested DIDs with source references, but Aida supports multiple DIDs and owns voice configuration. Echo's selected `iBusinessNumber` is UI context, not sufficient authorization.
+AidaAdmin self-issues the signed, short-lived staff token that AidaControl validates. AidaControl accepts exactly one configured issuer (`STAFF_TOKEN_ISSUER`) with a persisted shared secret (`STAFF_TOKEN_SECRET`) — a deployment credential that must survive restarts and is never generated at boot, or every restart would silently invalidate outstanding sessions and break the issuer pairing.
 
-AidaAdmin is a separate public application for the POC and redirects to EchoWeb for sign-in/token exchange. EchoWeb may also link to or later embed Aida administration. A later centralized OAuth/OIDC project may own identity for both products. Until then, retain one authoritative Echo identity store and no second password database.
+The token includes user, Aida tenant, permissions, session ID, issuer/audience, issue/expiry, and token ID. AidaControl validates the token and performs all Aida authorization itself; permissions such as `voice.routes.manage`, `voice.profiles.manage`, `voice.calls.control`, and `voice.calls.read` derive from verified role/group claims or an explicit allowlist, never from an email suffix.
+
+### 13.3 Tenancy and data boundaries
+
+- An Aida `tenantId` links to an `id` organization through `tenant_external_reference` with `system = id` (§6.1). `id`'s identifiers are external references, never Aida primary keys.
+- Echo's SMS business-phone table is not Aida voice routing. It may seed suggested DIDs with source references, but Aida supports multiple DIDs and owns voice configuration. A selected business number in any UI is context, not sufficient authorization.
 
 ## 14. LocalSplash CRM integration
 
@@ -603,4 +607,4 @@ Organization-specific white-labeling is deferred until after consultation. The d
 
 AidaControl contracts and deterministic fakes are delivered first so the other projects can be built independently. OfficePulse is customized by installing the integration repository's service, include files, prompts, and configuration; Asterisk itself is never forked.
 
-The six names above are the complete list of new GitHub repositories for the initial implementation. `EchoWeb` is an existing repository that receives the Aida token-exchange modification; it is not duplicated or counted as a new Aida repository. EchoDatabase and EchoService remain existing integrations and require changes only if their own repository-specific implementation plan explicitly identifies one.
+The six names above are the complete list of new GitHub repositories for the initial implementation. `id` is an existing LocalSplash service that AidaAdmin integrates with per §13; no Echo repository receives Aida-specific changes. EchoService remains an existing messaging integration and requires changes only if its own repository-specific implementation plan explicitly identifies one.
