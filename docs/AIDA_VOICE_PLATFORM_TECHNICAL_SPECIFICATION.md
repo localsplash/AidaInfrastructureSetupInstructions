@@ -58,21 +58,21 @@ Telephone numbers are E.164 strings, such as `+12065551212`. Asterisk channel na
 
 ### 4.1 Public wildcard
 
-All Aida-owned public services use `*.aida.relevant.com`. One wildcard DNS record points to one public ingress IP. TLS uses a wildcard certificate.
+All Aida-owned public services use `*.aida.localsplash.ai`. One wildcard DNS record points to one public ingress IP. TLS uses a wildcard certificate.
 
 | Hostname | Service |
 |---|---|
-| `app.aida.relevant.com` | Administration application |
-| `api.aida.relevant.com` | Browser/handset REST API, signed LiveKit webhook receiver, and published contract artifacts under `/v1/contracts/...` |
+| `app.aida.localsplash.ai` | Administration application |
+| `api.aida.localsplash.ai` | Browser/handset REST API, signed LiveKit webhook receiver, and published contract artifacts under `/v1/contracts/...` |
 | `id.localsplash.ai` | LocalSplash identity service (`id`). Its `PARENT_DOMAIN` is the apex `localsplash.ai` — independent of Aida's wildcard DNS record, certificate, and ingress |
 
-Ingress routes by hostname to internal services. Published contract artifacts (OpenAPI, AsyncAPI, JSON Schemas) are served under `api.aida.relevant.com/v1/contracts/...` — a path on the existing API hostname matching the `/v1` versioning scheme; there is deliberately no separate `contracts.aida.*` hostname or DNS entry. The `id` service is reached at its own apex-domain hostname and is not behind Aida's ingress. The POC and foreseeable deployment use LiveKit Cloud for media and realtime transcript/control data. Pusher provides call-arrival notifications. Aida does not operate a first-party WebSocket service and no `realtime.aida.relevant.com` DNS record is required.
+Ingress routes by hostname to internal services. Published contract artifacts (OpenAPI, AsyncAPI, JSON Schemas) are served under `api.aida.localsplash.ai/v1/contracts/...` — a path on the existing API hostname matching the `/v1` versioning scheme; there is deliberately no separate `contracts.aida.*` hostname or DNS entry. The `id` service is reached at its own apex-domain hostname and is not behind Aida's ingress. The POC and foreseeable deployment use LiveKit Cloud for media and realtime transcript/control data. Pusher provides call-arrival notifications. Aida does not operate a first-party WebSocket service and no `realtime.aida.localsplash.ai` DNS record is required.
 
 A first-party realtime gateway is outside the planned system. It would be reconsidered only if Aida intentionally replaces LiveKit Data for application events because of a demonstrated requirement such as unsupported client behavior, contractual data-residency restrictions, or measured scale/cost constraints. Such a change requires a new architecture revision and is not implied by this specification.
 
 ### 4.2 Private OfficePulse API
 
-Use **`officepulse-api.relevant.com`**. DNS names remain lowercase even though the product label is “OfficePulse API.”
+Use **`officepulse-api.localsplash.ai`**. DNS names remain lowercase even though the product label is “OfficePulse API.”
 
 This hostname resolves to a different private or tightly restricted IP from the public wildcard. Preferred connectivity is private networking, VPN, or an overlay. If Internet-routable, firewall rules allowlist OfficePulse egress addresses and both sides require mTLS. It exposes no browser UI, permissive CORS, user login, or public API explorer.
 
@@ -149,7 +149,7 @@ Caller barge-in is enabled during ordinary screening. AidaAgent/LiveKit speech h
 
 ### 5.3 `OfficePulseAidaIntegration`
 
-Companion service and managed configuration layered onto the existing OfficePulse server. It does not fork, rebuild, or modify Asterisk source code. Its TypeScript/Node.js service is deployed adjacent to Asterisk and is externally addressed as OfficePulse API at `officepulse-api.relevant.com`.
+Companion service and managed configuration layered onto the existing OfficePulse server. It does not fork, rebuild, or modify Asterisk source code. Its TypeScript/Node.js service is deployed adjacent to Asterisk and is externally addressed as OfficePulse API at `officepulse-api.localsplash.ai`.
 
 Responsibilities:
 
@@ -168,7 +168,7 @@ The repository contains the companion ARI/Stasis service, a versioned `aida.conf
 
 ### 5.4 `AidaAdmin`
 
-Responsive tenant/staff application at `app.aida.relevant.com`.
+Responsive tenant/staff application at `app.aida.localsplash.ai`.
 
 It manages profiles, publishing, routes, devices, retention, platform appearance settings, and permitted call views. It displays CRM defaults separately from effective overrides. It validates destinations through AidaControl and never accesses NocoDB, ARI, or Asterisk configuration directly.
 
@@ -381,7 +381,7 @@ Topic strings, payload schema references, producer, allowed audience, delivery k
 AidaControl exposes exactly one LiveKit Cloud callback:
 
 ```http
-POST https://api.aida.relevant.com/v1/integrations/livekit/webhooks
+POST https://api.aida.localsplash.ai/v1/integrations/livekit/webhooks
 Content-Type: application/webhook+json
 Authorization: <LiveKit-signed JWT>
 ```
@@ -396,7 +396,7 @@ LiveKit webhook `id` is the deduplication key. AidaControl records processed web
 
 Configuration variables are:
 
-- `LIVEKIT_WEBHOOK_URL=https://api.aida.relevant.com/v1/integrations/livekit/webhooks` for setup/documentation;
+- `LIVEKIT_WEBHOOK_URL=https://api.aida.localsplash.ai/v1/integrations/livekit/webhooks` for setup/documentation;
 - `LIVEKIT_WEBHOOK_API_KEY` for the Signing API key selected in LiveKit Cloud;
 - `LIVEKIT_WEBHOOK_API_SECRET` for verification, stored only in AidaControl's secret store.
 
@@ -471,7 +471,7 @@ These are project-owned recordings, not assumed Asterisk built-ins. `OfficePulse
 
 ## 11. API boundaries
 
-### 11.1 Public API at `api.aida.relevant.com`
+### 11.1 Public API at `api.aida.localsplash.ai`
 
 - identity/permissions and device enrollment;
 - profiles, drafts, versions, validation, publish, rollback;
@@ -489,7 +489,7 @@ AidaAdmin's identity integration adds two endpoints of its own — the `POST /id
 
 The LiveKit webhook route is the sole exception to Aida user/workload-token authentication on the public API. It accepts only `application/webhook+json`, preserves the raw body and `Authorization` header for `WebhookReceiver`, performs no CSRF check, and applies the verification, deduplication, and event rules in §9.3.
 
-### 11.2 Private API at `officepulse-api.relevant.com`
+### 11.2 Private API at `officepulse-api.localsplash.ai`
 
 - `POST /internal/v1/calls/bootstrap`
 - `POST /internal/v1/calls/{id}/events`
@@ -553,7 +553,7 @@ AidaAdmin provides a simple settings page for the single platform brand:
 - support and legal URLs;
 - logo, icon, and related image upload.
 
-Uploaded files are validated for allowed type and size, assigned opaque names, and stored by the Aida deployment. They are served through the existing application origin under `https://app.aida.relevant.com/brand-assets/...`; no additional asset hostname or DNS record is required. AidaControl stores the settings and asset references, and AidaAdmin never accepts an arbitrary executable or remote asset URL as an upload substitute.
+Uploaded files are validated for allowed type and size, assigned opaque names, and stored by the Aida deployment. They are served through the existing application origin under `https://app.aida.localsplash.ai/brand-assets/...`; no additional asset hostname or DNS record is required. AidaControl stores the settings and asset references, and AidaAdmin never accepts an arbitrary executable or remote asset URL as an upload substitute.
 
 Organization-specific white-labeling is deferred until after consultation. The data/API design may avoid choices that make future multi-brand support impossible, but no multi-brand UI, routing, custom-domain resolution, or reseller behavior is implemented or tested in the POC.
 
