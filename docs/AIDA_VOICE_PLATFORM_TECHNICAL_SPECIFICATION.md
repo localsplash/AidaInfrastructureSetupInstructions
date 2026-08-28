@@ -109,7 +109,7 @@ AidaControl is also the source of truth for shared contracts and both Aida-owned
 - `/contracts/schemas` for Profile, event, command, state, permission, and error definitions;
 - `/contracts/fixtures` for normal, failure, retry, and takeover scenarios;
 - `/generated-clients` or CI release artifacts for Kotlin, Python, and TypeScript consumers;
-- `/nocodb/schema` with a versioned base/table manifest;
+- `/nocodb/schema` with a versioned table manifest for the shared `AidaOffice` base (§6.3), which AidaControl shares with the other Aida projects rather than owning privately;
 - `/nocodb/scripts` for create, validate, seed, upgrade, and backup checks.
 - `/postgres/migrations` for hot-path transactional tables;
 - `/postgres/seeds` and integration-test fixtures.
@@ -120,7 +120,7 @@ This is not a separate Contracts or Data service. AidaControl implements the int
 
 Postgres is exclusive to AidaControl and stores the live transactional path: `call_session`, `call_event`, and `control_command`. AidaControl uses database transactions, row-level locking, unique idempotency constraints, optimistic state versions, and per-call ordered event allocation to implement first-command-wins semantics safely.
 
-NocoDB stores slow-moving, human-edited configuration: tenants, profile drafts/versions, inbound routes, devices/bindings, singleton appearance settings, CRM import records, per-field configuration-source metadata, and related audit/configuration metadata. The automation uses environment-supplied URL, workspace/base identifiers, and API token. The existing NocoDB instance is assumed to be MySQL-backed, but AidaControl uses only the NocoDB API and avoids backend-specific SQL behavior.
+NocoDB stores slow-moving, human-edited configuration: tenants, profile drafts/versions, inbound routes, devices/bindings, singleton appearance settings, CRM import records, per-field configuration-source metadata, and related audit/configuration metadata. These tables live in the shared `AidaOffice` base alongside other Aida projects' tables (§6.3), so AidaControl's schema automation is strictly additive: it creates and validates its own tables and reports unknown tables rather than dropping them. The automation uses environment-supplied URL, workspace/base identifiers, and API token. The existing NocoDB instance is assumed to be MySQL-backed, but AidaControl uses only the NocoDB API and avoids backend-specific SQL behavior.
 
 Tests cover all legal/illegal state transitions, route resolution, profile pinning, tenant isolation, permissions, concurrent takeover races, duplicate idempotency keys, ordered sequence allocation, schema/example validation, generated-client compilation, contract compatibility, Postgres migrations, and NocoDB bootstrap/upgrade behavior. OfficePulse, LiveKit, Echo, CRM, Pusher, FCM, and NocoDB adapters have non-networked fakes; transactional integration tests run against disposable Postgres.
 
@@ -200,10 +200,11 @@ Documentation-and-automation repository rather than an application service. It i
 It contains:
 
 - dependency/version matrix and supported deployment topology;
-- complete environment-variable and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB, the `id` client registration for AidaAdmin, the persisted staff-token issuer/secret pair shared between AidaAdmin and AidaControl (never generated at boot), Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
+- complete environment-variable and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB (URL, API token, and the shared `AidaOffice` base of §6.3, which AidaControl addresses by identifier as `NOCODB_BASE_ID` while `id` and AidaAdmin address it by title as `NOCODB_BASE_NAME`), the `id` client registration for AidaAdmin, the persisted staff-token issuer/secret pair shared between AidaAdmin and AidaControl (never generated at boot), Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
 - public wildcard and private OfficePulse DNS, TLS, firewall, mTLS, and ingress instructions;
 - Docker Compose orchestration referencing released project images;
-- scripts that run AidaControl's Postgres migrations and invoke its NocoDB schema commands to create/validate/seed the configuration base;
+- scripts that run AidaControl's Postgres migrations and invoke its NocoDB schema commands to create/validate/seed the shared `AidaOffice` base;
+- the cross-project runbook for consolidating Aida's NocoDB tables into that base, covering ordering, the shared table namespace, secret handling, verification, and rollback;
 - `id` client registration and configuration instructions for AidaAdmin;
 - OfficePulse integration installation order and verification;
 - health-check, smoke-test, backup, restore, upgrade, and rollback runbooks;
@@ -241,6 +242,10 @@ Publishing materializes the entire effective configuration into an immutable Pro
 The POC locale is fixed to English (`en-US`). Profile configuration includes English prompt assets and per-session prompt/business/behavior settings, but does not duplicate or transmit the predefined LiveKit agent's base model/STT/TTS configuration. The schema should remain evolvable so explicitly approved overrides and additional locales can be added later without changing call identifiers or API shapes.
 
 ### 6.3 NocoDB configuration records
+
+Every Aida project's NocoDB tables live in one shared base named **`AidaOffice`**. This is deliberate rather than incidental: NocoDB link fields, its foreign-key equivalent, resolve only within a single base, so relationships between projects' records are expressible only if those records share a base. Projects are separated by table name, not by base.
+
+The table-naming rule that keeps projects from colliding in that shared namespace: a table name is claimed by exactly one project, and a project adding a table checks the current inventory first. AidaControl owns the snake_case call-platform tables listed below plus those in §6.1 and §6.2; `id` owns `oAuthConfig`; AidaAdmin owns `appConfig` and reads `oAuthConfig`. Nothing collides today. A project's schema automation is additive within the base — it never drops or alters a table it does not own, and reports unknown tables instead. The operator procedure for consolidating existing bases into `AidaOffice` is the runbook in `docs/NOCODB_AIDAOFFICE_BASE_RUNBOOK.md`.
 
 - `inbound_route`: tenant, DID, profile, typed destination, ring timeout, no-answer/failure policy, OfficePulse node, enabled, revision.
 - `device`: tenant, label, platform, credential/public-key reference, enabled, last seen.
