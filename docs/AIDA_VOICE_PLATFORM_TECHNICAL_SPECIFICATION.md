@@ -200,7 +200,7 @@ Documentation-and-automation repository rather than an application service. It i
 It contains:
 
 - dependency/version matrix and supported deployment topology;
-- complete environment-variable and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB (URL, API token, and the shared `AidaOffice` base of §6.3, which AidaControl addresses by identifier as `NOCODB_BASE_ID` while `id` and AidaAdmin address it by title as `NOCODB_BASE_NAME`), the `id` client registration for AidaAdmin, the persisted staff-token issuer/secret pair shared between AidaAdmin and AidaControl (never generated at boot), Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
+- complete environment-variable and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB (URL, API token, and the shared `AidaOffice` base of §6.3, which AidaControl addresses by identifier as `NOCODB_BASE_ID` while `id` and AidaAdmin address it by title as `NOCODB_BASE_NAME`), the `id` client registration for AidaAdmin, the persisted staff-token issuer/secret pair shared between AidaAdmin and AidaControl (never generated at boot), the per-service `AIDA_APP_PRIVATE_KEY` of §11.3 (one per application per environment, never generated at boot and never stored in the registry), Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
 - public wildcard and private OfficePulse DNS, TLS, firewall, mTLS, and ingress instructions;
 - Docker Compose orchestration referencing released project images;
 - scripts that run AidaControl's Postgres migrations and invoke its NocoDB schema commands to create/validate/seed the shared `AidaOffice` base;
@@ -501,6 +501,30 @@ The LiveKit webhook route is the sole exception to Aida user/workload-token auth
 Use mTLS and scoped workload credentials. Requests include timestamp, nonce/idempotency key, and correlation ID. Browser cookies and handset tokens are invalid here.
 
 LiveKit tokens are short-lived and room/identity scoped. Handsets join as data-only participants and neither publish nor subscribe to media tracks. Prompts, secrets, PII, and reusable credentials are excluded from token metadata.
+
+### 11.3 Service-to-service credentials
+
+Aida services authenticate to one another with Ed25519 request signatures, keyed through a shared registry rather than pairwise configuration. With N services, pairwise secrets would mean N² values to distribute; the registry means each service publishes one key and fetches the rest.
+
+**Key custody.** Each service holds one private key per environment, supplied through its environment as `AIDA_APP_PRIVATE_KEY` (base64 of the PKCS#8 DER, so it fits one line). A service never generates or persists a private key: a key file inside a container does not survive a rebuild without a volume, and a volume that must be correct in every environment forever fails silently when it is not. Supplying the key through the environment also makes replicas trivial — every replica reads the same value and publishes the same public key.
+
+A missing key **in production is a startup failure** naming the variable. In development only, a service may generate an ephemeral key and warn; the environment guard is what keeps that off the production path. Each service ships a key-generation command so operators never improvise `openssl`.
+
+**The registry.** The `aida_application` table in the shared `AidaOffice` base (§6.3) holds, per application per environment: the application name, environment, **public key** and key version, an enabled flag, and last-seen metadata. Identity is keyed on `application_name` + `environment`, never hostname — container hostnames are ephemeral, and keying on them would create a row per restart.
+
+**No private key is ever stored in the registry.** Storing one there would make a single registry read sufficient to impersonate every service, which is precisely what this design exists to prevent given how widely the NocoDB API token is held.
+
+**Signing.** A caller signs method, path, body hash, timestamp and nonce — the timestamp, nonce and correlation ID §11.2 already requires. A callee resolves the caller's public key from the registry and verifies, rejecting stale timestamps and replayed nonces. A bare bearer secret would be replayable by anyone who observed it; a signature over a timestamp and nonce is not.
+
+**Rotation** publishes the new public key alongside the old with a new key version, allows an overlap window for peers to re-fetch, then retires the old. Verifiers accept any unretired key. Revocation removes the public key immediately, accepting that the application is uncallable until it publishes a new one.
+
+**Bootstrap.** `auto_enroll_applications`, in the `aida_system_setting` table, defaults to `true` on a fresh base, so a newly registered application is enabled and immediately usable. This is load-bearing rather than a convenience: AidaAdmin's administrative interface reaches its data through AidaControl, so an administrator cannot reach the screen that would enable an application if AidaControl is refusing that application's credential. Without automatic enrolment the system cannot bootstrap at all.
+
+Enrolment closes automatically once every application named in `expected_applications` holds an enabled row for that environment. That list does double duty: adding a name re-opens enrolment for exactly as long as the new service needs. The flip is per-environment, so a staging deployment closing must not close production. While enrolment is open the state is surfaced in the administrative interface, together with which expected applications have not yet registered, so an open door is a known state rather than a forgotten one.
+
+**Diagnostics.** A refused call is logged by both caller and callee, and reflected in readiness where it concerns the service's own registration, naming the application, environment, the registry row to inspect, and which check failed — unknown application, disabled, key mismatch, stale timestamp, or replayed nonce. These have different remedies and are not collapsed into a single "authentication failed". Over the wire the response stays generic: a caller learns that it was refused, never why, since disclosing the failing check hands a caller a probing oracle.
+
+**Developer access is not this mechanism.** A person calling the API authenticates through the staff-session path of §13 and may exercise the API through the contract browser AidaControl serves at `/v1/contracts/docs`. The `aida_application` registry is for services only; a person's credential is never a peer-service credential.
 
 ## 12. Administration
 
