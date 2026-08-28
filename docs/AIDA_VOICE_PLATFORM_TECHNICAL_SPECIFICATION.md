@@ -116,7 +116,9 @@ AidaControl is also the source of truth for shared contracts and both Aida-owned
 
 The OpenAPI definition includes the externally callable LiveKit webhook endpoint even though its authentication scheme is LiveKit signature verification rather than an Aida user token.
 
-This is not a separate Contracts or Data service. AidaControl implements the interfaces and owns both data models. Other repositories consume versioned contract artifacts from AidaControl releases and access data only through AidaControl APIs. They never access NocoDB or Postgres directly.
+This is not a separate Contracts or Data service. AidaControl implements the interfaces and owns both data models. Other repositories consume versioned contract artifacts from AidaControl releases.
+
+Postgres is AidaControl's alone: no other repository connects to it, ever. NocoDB is narrower than it once was. Aida's call-platform configuration — every table in §6.1, §6.2 and §6.3 except the two cross-project ones — is reached only through AidaControl's APIs, and no other repository reads or writes it directly. What other repositories may touch in `AidaOffice` is their own tables and the two cross-project tables named in §6.3, which exist precisely to be shared.
 
 Postgres is exclusive to AidaControl and stores the live transactional path: `call_session`, `call_event`, and `control_command`. AidaControl uses database transactions, row-level locking, unique idempotency constraints, optimistic state versions, and per-call ordered event allocation to implement first-command-wins semantics safely.
 
@@ -170,7 +172,7 @@ The repository contains the companion ARI/Stasis service, a versioned `aida.conf
 
 Responsive tenant/staff application at `app.aida.localsplash.ai`.
 
-It manages profiles, publishing, routes, devices, retention, platform appearance settings, and permitted call views. It displays CRM defaults separately from effective overrides. It validates destinations through AidaControl and never accesses NocoDB, ARI, or Asterisk configuration directly.
+It manages profiles, publishing, routes, devices, retention, platform appearance settings, and permitted call views. It displays CRM defaults separately from effective overrides. It validates destinations through AidaControl and never accesses ARI or Asterisk configuration directly. It reaches Aida's call-platform configuration only through AidaControl's APIs; in `AidaOffice` it touches its own `appConfig`, reads `oAuthConfig`, and registers itself in the cross-project tables of §6.3.
 
 AidaAdmin authenticates its users against the LocalSplash identity service (`id`, at `id.localsplash.ai`) using the flow in §13, holds its own persistent session, and self-issues the short-lived staff tokens AidaControl validates. It keeps no password store of its own.
 
@@ -245,7 +247,14 @@ The POC locale is fixed to English (`en-US`). Profile configuration includes Eng
 
 Every Aida project's NocoDB tables live in one shared base named **`AidaOffice`**. This is deliberate rather than incidental: NocoDB link fields, its foreign-key equivalent, resolve only within a single base, so relationships between projects' records are expressible only if those records share a base. Projects are separated by table name, not by base.
 
-The table-naming rule that keeps projects from colliding in that shared namespace: a table name is claimed by exactly one project, and a project adding a table checks the current inventory first. AidaControl owns the snake_case call-platform tables listed below plus those in §6.1 and §6.2; `id` owns `oAuthConfig`; AidaAdmin owns `appConfig` and reads `oAuthConfig`. Nothing collides today. A project's schema automation is additive within the base — it never drops or alters a table it does not own, and reports unknown tables instead. The operator procedure for consolidating existing bases into `AidaOffice` is the runbook in `docs/NOCODB_AIDAOFFICE_BASE_RUNBOOK.md`.
+The table-naming rule that keeps projects from colliding in that shared namespace: a table name is claimed by exactly one project, and a project adding a table checks the current inventory first. AidaControl owns the snake_case call-platform tables listed below plus those in §6.1 and §6.2; `id` owns `oAuthConfig`; AidaAdmin owns `appConfig` and reads `oAuthConfig`. Nothing collides today. A project's schema automation is additive within the base — it never drops or alters a table it does not own, and reports unknown tables instead.
+
+Two tables are **cross-project**, read and written by every Aida service rather than owned by one:
+
+- `aida_application`: the service-credential registry of §11.3 — application name, environment, public key, enabled, and last-seen metadata, keyed on application name plus environment.
+- `aida_system_setting`: platform switches held per environment, among them `application_registration_open`, the registration lock of §11.3.
+
+Ownership of a shared table runs to its **columns**, not only its name. AidaControl's versioned manifest is the single definition of both cross-project tables. Every other project finds them and must not create them with columns of its own choosing: two services that each create the same table on demand will disagree about its shape, and the one that loses the race then reads a column that does not exist. A service that finds a cross-project table missing reports it and waits rather than inventing one. The operator procedure for consolidating existing bases into `AidaOffice` is the runbook in `docs/NOCODB_AIDAOFFICE_BASE_RUNBOOK.md`.
 
 - `inbound_route`: tenant, DID, profile, typed destination, ring timeout, no-answer/failure policy, OfficePulse node, enabled, revision.
 - `device`: tenant, label, platform, credential/public-key reference, enabled, last seen.
@@ -510,7 +519,7 @@ Aida services authenticate to one another with Ed25519 request signatures, keyed
 
 A missing key **in production is a startup failure** naming the variable. In development only, a service may generate an ephemeral key and warn; the environment guard is what keeps that off the production path. Each service ships a key-generation command so operators never improvise `openssl`.
 
-**The registry.** The `aida_application` table in the shared `AidaOffice` base (§6.3) holds, per application per environment: the application name, environment, **public key** and key version, an enabled flag, and last-seen metadata. Identity is keyed on `application_name` + `environment`, never hostname — container hostnames are ephemeral, and keying on them would create a row per restart.
+**The registry.** The `aida_application` table in the shared `AidaOffice` base (§6.3) holds, per application per environment: the application name, environment, **public key**, an enabled flag, and last-seen metadata. There is no key version and no previous key, because keys do not expire. Identity is keyed on `application_name` + `environment`, never hostname — container hostnames are ephemeral, and keying on them would create a row per restart.
 
 **No private key is ever stored in the registry.** Storing one there would make a single registry read sufficient to impersonate every service, which is precisely what this design exists to prevent given how widely the NocoDB API token is held.
 
@@ -518,7 +527,7 @@ A missing key **in production is a startup failure** naming the variable. In dev
 
 **The wire format**, which every service must implement identically or nothing verifies. AidaControl is the reference implementation.
 
-Six headers carry the credential: `x-aida-application`, `x-aida-environment`, `x-aida-key-version`, `x-aida-timestamp` (Unix seconds), `x-aida-nonce`, and `x-aida-signature` (base64 Ed25519). The signature covers these eight lines joined by a single newline, in this order:
+Five headers carry the credential: `x-aida-application`, `x-aida-environment`, `x-aida-timestamp` (Unix seconds), `x-aida-nonce`, and `x-aida-signature` (base64 Ed25519). There is deliberately no key-version header: an application has exactly one published key at a time. The signature covers these eight lines joined by a single newline, in this order:
 
 ```
 AIDA-ED25519-V1
@@ -537,11 +546,25 @@ Because the signature covers a hash of the bytes as sent, a signed request body 
 
 Two further variables name the identity: `AIDA_APPLICATION_NAME` and `AIDA_ENVIRONMENT`. `AIDA_ENVIRONMENT` is deliberately separate from `NODE_ENV` or its equivalent, because they answer different questions — one selects code behaviour, the other names the deployment whose registry rows the process shares. Staging runs production code.
 
-**Rotation** publishes the new public key alongside the old with a new key version, allows an overlap window for peers to re-fetch, then retires the old. Verifiers accept any unretired key. Revocation removes the public key immediately, accepting that the application is uncallable until it publishes a new one.
+**Keys do not expire.** There is no scheduled rotation, no overlap window, and no retirement of an old key. A key is replaced only when it is lost or believed compromised, and replacing it is the deliberate operator procedure below rather than a routine the system runs on its own. This is a decision to keep the mechanism small: an expiry policy buys nothing here that closing the registration lock does not already buy, and every overlap window is a second key that verifies.
 
-**Bootstrap.** `auto_enroll_applications`, in the `aida_system_setting` table, defaults to `true` on a fresh base, so a newly registered application is enabled and immediately usable. This is load-bearing rather than a convenience: AidaAdmin's administrative interface reaches its data through AidaControl, so an administrator cannot reach the screen that would enable an application if AidaControl is refusing that application's credential. Without automatic enrolment the system cannot bootstrap at all.
+Revocation is the `enabled` flag on the application's row. Unticking it refuses that one application everywhere, immediately, without touching any other application or the lock.
 
-Enrolment closes automatically once every application named in `expected_applications` holds an enabled row for that environment. That list does double duty: adding a name re-opens enrolment for exactly as long as the new service needs. The flip is per-environment, so a staging deployment closing must not close production. While enrolment is open the state is surfaced in the administrative interface, together with which expected applications have not yet registered, so an open door is a known state rather than a forgotten one.
+**The registration lock.** Enrolment is governed by one switch, `application_registration_open` in the `aida_system_setting` table, held per environment. It behaves like a domain transfer lock.
+
+While the lock is **open**, a service that starts publishes its public key, its registry row is created enabled, and it is immediately usable. No per-application approval step stands between a service starting and its peers honouring it.
+
+While the lock is **closed**, the registry accepts no new application row, and accepts no change to the public key on an existing row. A refused write is logged naming the application, the environment and the row.
+
+Closing the lock is the approval. An operator brings the services up with the lock open, confirms that the rows present are the applications they expect and no others, and closes it. From that point the set of credentials the platform honours is fixed until someone deliberately opens the lock again.
+
+The lock defaults to open on a fresh base, and that default is load-bearing rather than a convenience. AidaAdmin's administrative interface reaches its data through AidaControl, so an administrator cannot reach any screen that would approve an application if AidaControl is already refusing that application's credential. A platform that required approval before its first service could talk could not start at all. The default is safe because it is visible: while the lock is open the administrative interface carries a standing notice saying so, since an open lock means anyone who can write to the base can mint a credential every service honours.
+
+The flip is per environment. Closing staging must never close production, and closing production must never close staging.
+
+Because keys never expire, a public key that changes while the lock is closed is either a service that lost its key or something impersonating one. The registry refuses the write in both cases and the difference is settled by a human, not by the software.
+
+**Replacing a key** is therefore an explicit procedure and not a rotation: open the lock, restart the service with the new key, confirm the row, close the lock. Peers holding a cached copy of the old key refuse the service until their cache turns over, which is a bounded and expected part of the procedure rather than something an overlap window has to hide.
 
 **Diagnostics.** A refused call is logged by both caller and callee, and reflected in readiness where it concerns the service's own registration, naming the application, environment, the registry row to inspect, and which check failed — unknown application, disabled, key mismatch, stale timestamp, or replayed nonce. These have different remedies and are not collapsed into a single "authentication failed". Over the wire the response stays generic: a caller learns that it was refused, never why, since disclosing the failing check hands a caller a probing oracle.
 
