@@ -18,6 +18,10 @@ Markdown, PowerShell/shell automation, Docker Compose, GitHub Actions
 
 [Canonical Aida Voice Platform specification](https://github.com/localsplash/AidaInfrastructureSetupInstructions/blob/main/docs/AIDA_VOICE_PLATFORM_TECHNICAL_SPECIFICATION.md)
 
+## Runbooks
+
+- [Consolidating Aida's NocoDB tables into the `AidaOffice` base](docs/NOCODB_AIDAOFFICE_BASE_RUNBOOK.md)
+
 ## Project invariant
 
 This is documentation and automation, not a long-running application service.
