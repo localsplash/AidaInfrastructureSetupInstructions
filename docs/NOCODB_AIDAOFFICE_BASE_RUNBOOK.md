@@ -80,10 +80,56 @@ Current inventory:
 | AidaControl | `tenant`, `tenant_external_reference`, `platform_appearance`, `assistant_profile`, `assistant_profile_version`, `profile_draft`, `inbound_route`, `device`, `device_destination_binding`, `configuration_source`, `crm_import_record`, `audit_event` |
 | `id` | `oAuthConfig` |
 | AidaAdmin | `appConfig` |
+| Cross-project | `aida_application`, `aida_system_setting` |
+
+The two cross-project tables are read and written by every service. AidaControl's
+versioned manifest is their single definition and no other project may create
+them.
+
+**Ownership runs to columns, not just to table names.** Two services that each
+create the same table on demand will disagree about its columns, and whichever
+loses the race then reads a column that is not there. That failure is silent at
+startup and surfaces later as an authentication failure nobody can place. Before
+pointing a service at the base, confirm it finds these tables rather than
+creating them.
 
 Generic names are the risk: a future `config`, `settings`, `user`, or `event`
 table is far likelier to collide than any name in the list above. A project
 whose natural table name is generic prefixes it with the project name.
+
+## The service registration lock
+
+`aida_system_setting` holds `application_registration_open` per environment. It
+works like a domain transfer lock, and standing up or repointing a base is
+exactly when it matters.
+
+While the lock is open, any service that starts publishes its public key into
+`aida_application` and every other service honours it immediately. That is what
+makes first startup possible, and it also means anyone who can write to the base
+can mint a credential the whole platform trusts. An open lock is a state to pass
+through, not to sit in.
+
+Order of operations:
+
+1. Confirm the lock is open for the environment being worked on, and only that
+   environment.
+2. Start every service with its own `AIDA_APP_PRIVATE_KEY` set. Never let a
+   service generate an ephemeral key outside development.
+3. Read `aida_application` and confirm the rows present are exactly the expected
+   applications, in the expected environment, and nothing else.
+4. Close the lock.
+5. Restart one service and confirm it still works with the lock closed. That
+   proves its key is persistent rather than generated per process.
+
+Keys do not expire, so there is nothing to schedule and no overlap window to
+wait out. Replacing a key that was lost or is believed compromised is a
+deliberate procedure: open the lock, restart that service with the new key,
+confirm the row, close the lock. Peers refuse the service until their cached
+copy of the old key turns over, which is expected rather than a fault.
+
+To take one application out of service without touching the lock, untick
+`enabled` on its row. That refuses that application everywhere and leaves every
+other credential alone.
 
 ## Foreign projects must not be destructive
 
@@ -127,6 +173,8 @@ Run all of these after repointing and before retiring anything.
   unaltered.
 - **Schema validation.** Each project's NocoDB validate command reports no drift
   and no unexpected removals.
+- **The registration lock is closed** for the environment, and `aida_application`
+  holds exactly the expected rows and no others.
 
 ## Rollback
 
