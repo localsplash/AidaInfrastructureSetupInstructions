@@ -58,21 +58,21 @@ Telephone numbers are E.164 strings, such as `+12065551212`. Asterisk channel na
 
 ### 4.1 Public wildcard
 
-All Aida-owned public services use `*.aida.localsplash.ai`. One wildcard DNS record points to one public ingress IP. TLS uses a wildcard certificate.
+All Aida-owned public services use `*.aida.relevant.com`. One wildcard DNS record points to one public ingress IP. TLS uses a wildcard certificate.
 
 | Hostname | Service |
 |---|---|
-| `app.aida.localsplash.ai` | Administration application |
-| `api.aida.localsplash.ai` | Browser/handset REST API, signed LiveKit webhook receiver, and published contract artifacts under `/v1/contracts/...` |
+| `app.aida.relevant.com` | Administration application |
+| `api.aida.relevant.com` | Browser/handset REST API, signed LiveKit webhook receiver, and published contract artifacts under `/v1/contracts/...` |
 | `id.localsplash.ai` | LocalSplash identity service (`id`). Its `PARENT_DOMAIN` is the apex `localsplash.ai` — independent of Aida's wildcard DNS record, certificate, and ingress |
 
-Ingress routes by hostname to internal services. Published contract artifacts (OpenAPI, AsyncAPI, JSON Schemas) are served under `api.aida.localsplash.ai/v1/contracts/...` — a path on the existing API hostname matching the `/v1` versioning scheme; there is deliberately no separate `contracts.aida.*` hostname or DNS entry. The `id` service is reached at its own apex-domain hostname and is not behind Aida's ingress. The POC and foreseeable deployment use LiveKit Cloud for media and realtime transcript/control data. Pusher provides call-arrival notifications. Aida does not operate a first-party WebSocket service and no `realtime.aida.localsplash.ai` DNS record is required.
+Ingress routes by hostname to internal services. Published contract artifacts (OpenAPI, AsyncAPI, JSON Schemas) are served under `api.aida.relevant.com/v1/contracts/...` — a path on the existing API hostname matching the `/v1` versioning scheme; there is deliberately no separate `contracts.aida.*` hostname or DNS entry. The `id` service is reached at its own apex-domain hostname and is not behind Aida's ingress. The POC and foreseeable deployment use LiveKit Cloud for media and realtime transcript/control data. Pusher provides call-arrival notifications. Aida does not operate a first-party WebSocket service and no `realtime.aida.relevant.com` DNS record is required.
 
 A first-party realtime gateway is outside the planned system. It would be reconsidered only if Aida intentionally replaces LiveKit Data for application events because of a demonstrated requirement such as unsupported client behavior, contractual data-residency restrictions, or measured scale/cost constraints. Such a change requires a new architecture revision and is not implied by this specification.
 
 ### 4.2 Private OfficePulse API
 
-Use **`officepulse-api.localsplash.ai`**. DNS names remain lowercase even though the product label is “OfficePulse API.”
+Use **`officepulse-api.relevant.com`**. DNS names remain lowercase even though the product label is “OfficePulse API.”
 
 This hostname resolves to a different private or tightly restricted IP from the public wildcard. Preferred connectivity is private networking, VPN, or an overlay. If Internet-routable, firewall rules allowlist OfficePulse egress addresses and both sides require mTLS. It exposes no browser UI, permissive CORS, user login, or public API explorer.
 
@@ -109,20 +109,18 @@ AidaControl is also the source of truth for shared contracts and both Aida-owned
 - `/contracts/schemas` for Profile, event, command, state, permission, and error definitions;
 - `/contracts/fixtures` for normal, failure, retry, and takeover scenarios;
 - `/generated-clients` or CI release artifacts for Kotlin, Python, and TypeScript consumers;
-- `/nocodb/schema` with a versioned table manifest for the shared `AidaOffice` base (§6.3), which AidaControl shares with the other Aida projects rather than owning privately;
+- `/nocodb/schema` with a versioned base/table manifest;
 - `/nocodb/scripts` for create, validate, seed, upgrade, and backup checks.
 - `/postgres/migrations` for hot-path transactional tables;
 - `/postgres/seeds` and integration-test fixtures.
 
 The OpenAPI definition includes the externally callable LiveKit webhook endpoint even though its authentication scheme is LiveKit signature verification rather than an Aida user token.
 
-This is not a separate Contracts or Data service. AidaControl implements the interfaces and owns both data models. Other repositories consume versioned contract artifacts from AidaControl releases.
-
-Postgres is AidaControl's alone: no other repository connects to it, ever. NocoDB is narrower than it once was. Aida's call-platform configuration — every table in §6.1, §6.2 and §6.3 except the two cross-project ones — is reached only through AidaControl's APIs, and no other repository reads or writes it directly. What other repositories may touch in `AidaOffice` is their own tables and the two cross-project tables named in §6.3, which exist precisely to be shared.
+This is not a separate Contracts or Data service. AidaControl implements the interfaces and owns both data models. Other repositories consume versioned contract artifacts from AidaControl releases and access data only through AidaControl APIs. They never access NocoDB or Postgres directly.
 
 Postgres is exclusive to AidaControl and stores the live transactional path: `call_session`, `call_event`, and `control_command`. AidaControl uses database transactions, row-level locking, unique idempotency constraints, optimistic state versions, and per-call ordered event allocation to implement first-command-wins semantics safely.
 
-NocoDB stores slow-moving, human-edited configuration: tenants, profile drafts/versions, inbound routes, devices/bindings, singleton appearance settings, CRM import records, per-field configuration-source metadata, and related audit/configuration metadata. These tables live in the shared `AidaOffice` base alongside other Aida projects' tables (§6.3), so AidaControl's schema automation is strictly additive: it creates and validates its own tables and reports unknown tables rather than dropping them. The automation uses environment-supplied URL, workspace/base identifiers, and API token. The existing NocoDB instance is assumed to be MySQL-backed, but AidaControl uses only the NocoDB API and avoids backend-specific SQL behavior.
+NocoDB stores slow-moving, human-edited configuration: tenants, profile drafts/versions, inbound routes, devices/bindings, singleton appearance settings, CRM import records, per-field configuration-source metadata, and related audit/configuration metadata. The automation uses environment-supplied URL, workspace/base identifiers, and API token. The existing NocoDB instance is assumed to be MySQL-backed, but AidaControl uses only the NocoDB API and avoids backend-specific SQL behavior.
 
 Tests cover all legal/illegal state transitions, route resolution, profile pinning, tenant isolation, permissions, concurrent takeover races, duplicate idempotency keys, ordered sequence allocation, schema/example validation, generated-client compilation, contract compatibility, Postgres migrations, and NocoDB bootstrap/upgrade behavior. OfficePulse, LiveKit, Echo, CRM, Pusher, FCM, and NocoDB adapters have non-networked fakes; transactional integration tests run against disposable Postgres.
 
@@ -151,7 +149,7 @@ Caller barge-in is enabled during ordinary screening. AidaAgent/LiveKit speech h
 
 ### 5.3 `OfficePulseAidaIntegration`
 
-Companion service and managed configuration layered onto the existing OfficePulse server. It does not fork, rebuild, or modify Asterisk source code. Its TypeScript/Node.js service is deployed adjacent to Asterisk and is externally addressed as OfficePulse API at `officepulse-api.localsplash.ai`.
+Companion service and managed configuration layered onto the existing OfficePulse server. It does not fork, rebuild, or modify Asterisk source code. Its TypeScript/Node.js service is deployed adjacent to Asterisk and is externally addressed as OfficePulse API at `officepulse-api.relevant.com`.
 
 Responsibilities:
 
@@ -170,9 +168,9 @@ The repository contains the companion ARI/Stasis service, a versioned `aida.conf
 
 ### 5.4 `AidaAdmin`
 
-Responsive tenant/staff application at `app.aida.localsplash.ai`.
+Responsive tenant/staff application at `app.aida.relevant.com`.
 
-It manages profiles, publishing, routes, devices, retention, platform appearance settings, and permitted call views. It displays CRM defaults separately from effective overrides. It validates destinations through AidaControl and never accesses ARI or Asterisk configuration directly. It reaches Aida's call-platform configuration only through AidaControl's APIs; in `AidaOffice` it touches its own `appConfig`, reads `oAuthConfig`, and registers itself in the cross-project tables of §6.3.
+It manages profiles, publishing, routes, devices, retention, platform appearance settings, and permitted call views. It displays CRM defaults separately from effective overrides. It validates destinations through AidaControl and never accesses NocoDB, ARI, or Asterisk configuration directly.
 
 AidaAdmin authenticates its users against the LocalSplash identity service (`id`, at `id.localsplash.ai`) using the flow in §13, holds its own persistent session, and self-issues the short-lived staff tokens AidaControl validates. It keeps no password store of its own.
 
@@ -202,11 +200,10 @@ Documentation-and-automation repository rather than an application service. It i
 It contains:
 
 - dependency/version matrix and supported deployment topology;
-- complete environment-variable and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB (URL, API token, and the shared `AidaOffice` base of §6.3, which AidaControl addresses by identifier as `NOCODB_BASE_ID` while `id` and AidaAdmin address it by title as `NOCODB_BASE_NAME`), the `id` client registration for AidaAdmin, the persisted staff-token issuer/secret pair shared between AidaAdmin and AidaControl (never generated at boot), the per-service `AIDA_APP_PRIVATE_KEY` of §11.3 with its `AIDA_APPLICATION_NAME` and `AIDA_ENVIRONMENT` identity pair (one key per application per environment, generated by each service's key-generation command, never generated at boot and never stored in the registry), Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
+- complete environment-variable and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB, the `id` client registration for AidaAdmin, the persisted staff-token issuer/secret pair shared between AidaAdmin and AidaControl (never generated at boot), Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
 - public wildcard and private OfficePulse DNS, TLS, firewall, mTLS, and ingress instructions;
 - Docker Compose orchestration referencing released project images;
-- scripts that run AidaControl's Postgres migrations and invoke its NocoDB schema commands to create/validate/seed the shared `AidaOffice` base;
-- the cross-project runbook for consolidating Aida's NocoDB tables into that base, covering ordering, the shared table namespace, secret handling, verification, and rollback;
+- scripts that run AidaControl's Postgres migrations and invoke its NocoDB schema commands to create/validate/seed the configuration base;
 - `id` client registration and configuration instructions for AidaAdmin;
 - OfficePulse integration installation order and verification;
 - health-check, smoke-test, backup, restore, upgrade, and rollback runbooks;
@@ -244,17 +241,6 @@ Publishing materializes the entire effective configuration into an immutable Pro
 The POC locale is fixed to English (`en-US`). Profile configuration includes English prompt assets and per-session prompt/business/behavior settings, but does not duplicate or transmit the predefined LiveKit agent's base model/STT/TTS configuration. The schema should remain evolvable so explicitly approved overrides and additional locales can be added later without changing call identifiers or API shapes.
 
 ### 6.3 NocoDB configuration records
-
-Every Aida project's NocoDB tables live in one shared base named **`AidaOffice`**. This is deliberate rather than incidental: NocoDB link fields, its foreign-key equivalent, resolve only within a single base, so relationships between projects' records are expressible only if those records share a base. Projects are separated by table name, not by base.
-
-The table-naming rule that keeps projects from colliding in that shared namespace: a table name is claimed by exactly one project, and a project adding a table checks the current inventory first. AidaControl owns the snake_case call-platform tables listed below plus those in §6.1 and §6.2; `id` owns `oAuthConfig`; AidaAdmin owns `appConfig` and reads `oAuthConfig`. Nothing collides today. A project's schema automation is additive within the base — it never drops or alters a table it does not own, and reports unknown tables instead.
-
-Two tables are **cross-project**, read and written by every Aida service rather than owned by one:
-
-- `aida_application`: the service-credential registry of §11.3 — application name, environment, public key, enabled, and last-seen metadata, keyed on application name plus environment.
-- `aida_system_setting`: platform switches held per environment, among them `application_registration_open`, the registration lock of §11.3.
-
-Ownership of a shared table runs to its **columns**, not only its name. AidaControl's versioned manifest is the single definition of both cross-project tables. Every other project finds them and must not create them with columns of its own choosing: two services that each create the same table on demand will disagree about its shape, and the one that loses the race then reads a column that does not exist. A service that finds a cross-project table missing reports it and waits rather than inventing one. The operator procedure for consolidating existing bases into `AidaOffice` is the runbook in `docs/NOCODB_AIDAOFFICE_BASE_RUNBOOK.md`.
 
 - `inbound_route`: tenant, DID, profile, typed destination, ring timeout, no-answer/failure policy, OfficePulse node, enabled, revision.
 - `device`: tenant, label, platform, credential/public-key reference, enabled, last seen.
@@ -390,7 +376,7 @@ Topic strings, payload schema references, producer, allowed audience, delivery k
 AidaControl exposes exactly one LiveKit Cloud callback:
 
 ```http
-POST https://api.aida.localsplash.ai/v1/integrations/livekit/webhooks
+POST https://api.aida.relevant.com/v1/integrations/livekit/webhooks
 Content-Type: application/webhook+json
 Authorization: <LiveKit-signed JWT>
 ```
@@ -405,7 +391,7 @@ LiveKit webhook `id` is the deduplication key. AidaControl records processed web
 
 Configuration variables are:
 
-- `LIVEKIT_WEBHOOK_URL=https://api.aida.localsplash.ai/v1/integrations/livekit/webhooks` for setup/documentation;
+- `LIVEKIT_WEBHOOK_URL=https://api.aida.relevant.com/v1/integrations/livekit/webhooks` for setup/documentation;
 - `LIVEKIT_WEBHOOK_API_KEY` for the Signing API key selected in LiveKit Cloud;
 - `LIVEKIT_WEBHOOK_API_SECRET` for verification, stored only in AidaControl's secret store.
 
@@ -480,7 +466,7 @@ These are project-owned recordings, not assumed Asterisk built-ins. `OfficePulse
 
 ## 11. API boundaries
 
-### 11.1 Public API at `api.aida.localsplash.ai`
+### 11.1 Public API at `api.aida.relevant.com`
 
 - identity/permissions and device enrollment;
 - profiles, drafts, versions, validation, publish, rollback;
@@ -498,7 +484,7 @@ AidaAdmin's identity integration adds two endpoints of its own — the `POST /id
 
 The LiveKit webhook route is the sole exception to Aida user/workload-token authentication on the public API. It accepts only `application/webhook+json`, preserves the raw body and `Authorization` header for `WebhookReceiver`, performs no CSRF check, and applies the verification, deduplication, and event rules in §9.3.
 
-### 11.2 Private API at `officepulse-api.localsplash.ai`
+### 11.2 Private API at `officepulse-api.relevant.com`
 
 - `POST /internal/v1/calls/bootstrap`
 - `POST /internal/v1/calls/{id}/events`
@@ -510,65 +496,6 @@ The LiveKit webhook route is the sole exception to Aida user/workload-token auth
 Use mTLS and scoped workload credentials. Requests include timestamp, nonce/idempotency key, and correlation ID. Browser cookies and handset tokens are invalid here.
 
 LiveKit tokens are short-lived and room/identity scoped. Handsets join as data-only participants and neither publish nor subscribe to media tracks. Prompts, secrets, PII, and reusable credentials are excluded from token metadata.
-
-### 11.3 Service-to-service credentials
-
-Aida services authenticate to one another with Ed25519 request signatures, keyed through a shared registry rather than pairwise configuration. With N services, pairwise secrets would mean N² values to distribute; the registry means each service publishes one key and fetches the rest.
-
-**Key custody.** Each service holds one private key per environment, supplied through its environment as `AIDA_APP_PRIVATE_KEY` (base64 of the PKCS#8 DER, so it fits one line). A service never generates or persists a private key: a key file inside a container does not survive a rebuild without a volume, and a volume that must be correct in every environment forever fails silently when it is not. Supplying the key through the environment also makes replicas trivial — every replica reads the same value and publishes the same public key.
-
-A missing key **in production is a startup failure** naming the variable. In development only, a service may generate an ephemeral key and warn; the environment guard is what keeps that off the production path. Each service ships a key-generation command so operators never improvise `openssl`.
-
-**The registry.** The `aida_application` table in the shared `AidaOffice` base (§6.3) holds, per application per environment: the application name, environment, **public key**, an enabled flag, and last-seen metadata. There is no key version and no previous key, because keys do not expire. Identity is keyed on `application_name` + `environment`, never hostname — container hostnames are ephemeral, and keying on them would create a row per restart.
-
-**No private key is ever stored in the registry.** Storing one there would make a single registry read sufficient to impersonate every service, which is precisely what this design exists to prevent given how widely the NocoDB API token is held.
-
-**Signing.** A caller signs method, path, body hash, timestamp and nonce — the timestamp, nonce and correlation ID §11.2 already requires. A callee resolves the caller's public key from the registry and verifies, rejecting stale timestamps and replayed nonces. A bare bearer secret would be replayable by anyone who observed it; a signature over a timestamp and nonce is not.
-
-**The wire format**, which every service must implement identically or nothing verifies. AidaControl is the reference implementation.
-
-Five headers carry the credential: `x-aida-application`, `x-aida-environment`, `x-aida-timestamp` (Unix seconds), `x-aida-nonce`, and `x-aida-signature` (base64 Ed25519). There is deliberately no key-version header: an application has exactly one published key at a time. The signature covers these eight lines joined by a single newline, in this order:
-
-```
-AIDA-ED25519-V1
-<method, uppercase>
-<path including query string>
-<lowercase hex SHA-256 of the request body, of the empty string when there is none>
-<timestamp>
-<nonce>
-<application name>
-<environment>
-```
-
-Three of those lines are there for a specific attack. The **scheme name** is first so a future v2 cannot be verified as a v1 by a peer that has not been upgraded. The **claimed identity** is inside the signature rather than only in the headers, so the identity headers cannot be swapped onto another application's registry row. The **query string** is inside it, so an observer cannot turn a captured `?limit=1` into `?limit=1000`.
-
-Because the signature covers a hash of the bytes as sent, a signed request body must reach the verifier unparsed — the same constraint the LiveKit webhook receiver already has, and for the same reason: re-serialising JSON yields something semantically identical and byte-different. AidaControl gives signed routes the dedicated content type `application/aida-signed+json`, parsed as an untouched string.
-
-Two further variables name the identity: `AIDA_APPLICATION_NAME` and `AIDA_ENVIRONMENT`. `AIDA_ENVIRONMENT` is deliberately separate from `NODE_ENV` or its equivalent, because they answer different questions — one selects code behaviour, the other names the deployment whose registry rows the process shares. Staging runs production code.
-
-**Keys do not expire.** There is no scheduled rotation, no overlap window, and no retirement of an old key. A key is replaced only when it is lost or believed compromised, and replacing it is the deliberate operator procedure below rather than a routine the system runs on its own. This is a decision to keep the mechanism small: an expiry policy buys nothing here that closing the registration lock does not already buy, and every overlap window is a second key that verifies.
-
-Revocation is the `enabled` flag on the application's row. Unticking it refuses that one application everywhere, immediately, without touching any other application or the lock.
-
-**The registration lock.** Enrolment is governed by one switch, `application_registration_open` in the `aida_system_setting` table, held per environment. It behaves like a domain transfer lock.
-
-While the lock is **open**, a service that starts publishes its public key, its registry row is created enabled, and it is immediately usable. No per-application approval step stands between a service starting and its peers honouring it.
-
-While the lock is **closed**, the registry accepts no new application row, and accepts no change to the public key on an existing row. A refused write is logged naming the application, the environment and the row.
-
-Closing the lock is the approval. An operator brings the services up with the lock open, confirms that the rows present are the applications they expect and no others, and closes it. From that point the set of credentials the platform honours is fixed until someone deliberately opens the lock again.
-
-The lock defaults to open on a fresh base, and that default is load-bearing rather than a convenience. AidaAdmin's administrative interface reaches its data through AidaControl, so an administrator cannot reach any screen that would approve an application if AidaControl is already refusing that application's credential. A platform that required approval before its first service could talk could not start at all. The default is safe because it is visible: while the lock is open the administrative interface carries a standing notice saying so, since an open lock means anyone who can write to the base can mint a credential every service honours.
-
-The flip is per environment. Closing staging must never close production, and closing production must never close staging.
-
-Because keys never expire, a public key that changes while the lock is closed is either a service that lost its key or something impersonating one. The registry refuses the write in both cases and the difference is settled by a human, not by the software.
-
-**Replacing a key** is therefore an explicit procedure and not a rotation: open the lock, restart the service with the new key, confirm the row, close the lock. Peers holding a cached copy of the old key refuse the service until their cache turns over, which is a bounded and expected part of the procedure rather than something an overlap window has to hide.
-
-**Diagnostics.** A refused call is logged by both caller and callee, and reflected in readiness where it concerns the service's own registration, naming the application, environment, the registry row to inspect, and which check failed — unknown application, disabled, key mismatch, stale timestamp, or replayed nonce. These have different remedies and are not collapsed into a single "authentication failed". Over the wire the response stays generic: a caller learns that it was refused, never why, since disclosing the failing check hands a caller a probing oracle.
-
-**Developer access is not this mechanism.** A person calling the API authenticates through the staff-session path of §13 and may exercise the API through the contract browser AidaControl serves at `/v1/contracts/docs`. The `aida_application` registry is for services only; a person's credential is never a peer-service credential.
 
 ## 12. Administration
 
@@ -621,7 +548,7 @@ AidaAdmin provides a simple settings page for the single platform brand:
 - support and legal URLs;
 - logo, icon, and related image upload.
 
-Uploaded files are validated for allowed type and size, assigned opaque names, and stored by the Aida deployment. They are served through the existing application origin under `https://app.aida.localsplash.ai/brand-assets/...`; no additional asset hostname or DNS record is required. AidaControl stores the settings and asset references, and AidaAdmin never accepts an arbitrary executable or remote asset URL as an upload substitute.
+Uploaded files are validated for allowed type and size, assigned opaque names, and stored by the Aida deployment. They are served through the existing application origin under `https://app.aida.relevant.com/brand-assets/...`; no additional asset hostname or DNS record is required. AidaControl stores the settings and asset references, and AidaAdmin never accepts an arbitrary executable or remote asset URL as an upload substitute.
 
 Organization-specific white-labeling is deferred until after consultation. The data/API design may avoid choices that make future multi-brand support impossible, but no multi-brand UI, routing, custom-domain resolution, or reseller behavior is implemented or tested in the POC.
 
