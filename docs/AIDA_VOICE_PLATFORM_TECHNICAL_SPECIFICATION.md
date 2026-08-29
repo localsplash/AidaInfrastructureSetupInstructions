@@ -538,6 +538,17 @@ Identity for the Aida Voice Platform is the in-scope LocalSplash identity servic
 - **Revocation, two paths that must both exist.** `id` pushes revocation and identity-change events to AidaAdmin's `POST /id/events` webhook receiver. Because a webhook can be missed while AidaAdmin is down, AidaAdmin also calls `id`'s `GET /api/events?since=<cursor>` on boot to catch up on anything delivered while it was away, then resumes webhook consumption. A revoked user's AidaAdmin session and any outstanding staff tokens for it are invalidated.
 - These two endpoints — the webhook receiver and the catch-up client — belong to **AidaAdmin's** surface, not AidaControl's public API (§11.1).
 
+The `id` application handoff remains generic for configured `PARENT_DOMAIN`
+(`X.TLD`); `localsplash.ai` is the POC deployment value rather than a protocol
+constant. For the POC, server-to-server `id` trust uses TLS plus IPv4/CIDR
+allowlists and no application shared secret or webhook HMAC. `id` protects
+token redemption, application registration, event catch-up, and user-directory
+routes with `ID_TRUSTED_APP_CIDRS`; AidaAdmin protects `/id/events` with
+`ID_EVENT_SOURCE_CIDRS`. Both ingress and application code enforce the policy.
+Forwarded client addresses are honored only from `ID_TRUSTED_PROXY_CIDRS`.
+This authenticates a controlled first-party server/network, not an individual
+application process, and is not sufficient for unrelated customer-hosted apps.
+
 ### 13.2 AidaAdmin configuration and AidaControl authorization
 
 For the POC, AidaAdmin's server writes configuration to NocoDB directly and calls OfficePulseAidaIntegration's private provisioning API. Its NocoDB token and provisioning credential never enter browser code. AidaControl reads configuration during call bootstrap and is not in the configuration-write path.

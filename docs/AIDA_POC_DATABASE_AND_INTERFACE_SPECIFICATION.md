@@ -312,7 +312,7 @@ the administrator; later discrepancies surface as explicit runtime errors.
 Name: authorizeApplication
 Interface: HTTP GET https://id.localsplash.ai/authorize
 Parameters:
-  redirect_uri: HTTPS URL under localsplash.ai
+  redirect_uri: HTTPS URL under configured PARENT_DOMAIN (X.TLD)
   state: opaque CSRF value
 Result:
   HTTP redirect to redirect_uri with code and state
@@ -326,7 +326,8 @@ Interface: HTTP POST https://id.localsplash.ai/api/token
 Parameters:
   code: string
   redirect_uri: string
-  client_secret: ID_CLIENT_SECRET
+Network authorization:
+  source IPv4 must match ID_TRUSTED_APP_CIDRS
 Result:
   user.iUserId: integer
   user.email: string
@@ -355,12 +356,12 @@ Super Admin status from the email address.
 Name: registerApplicationWebhook
 Interface: HTTP POST https://id.localsplash.ai/api/apps/register
 Parameters:
-  client_secret: ID_CLIENT_SECRET
   name: AidaAdmin
   webhook_url: https://app.aida.localsplash.ai/id/events
+Network authorization:
+  source IPv4 must match ID_TRUSTED_APP_CIDRS
 Result:
   origin: string
-  secret: webhook signing secret
   events: string[]
 ```
 
@@ -373,7 +374,8 @@ Headers:
   X-Id-Event
   X-Id-Event-Id
   X-Id-Timestamp
-  X-Id-Signature
+Network authorization:
+  source IPv4 must match ID_EVENT_SOURCE_CIDRS
 Body:
   id: integer
   type: ping | session.revoked | user.merged | identity.linked | identity.unlinked
@@ -386,11 +388,36 @@ Body:
 ```text
 Name: listIdentityEvents
 Interface: HTTP GET https://id.localsplash.ai/api/events
-Headers:
-  X-Id-Client-Secret: ID_CLIENT_SECRET
 Parameters:
   since: last durably processed event ID
+Network authorization:
+  source IPv4 must match ID_TRUSTED_APP_CIDRS
 ```
+
+#### `id` server-to-server trust
+
+The POC uses TLS plus IPv4/CIDR allowlisting for `id` application-server
+traffic and uses no `ID_CLIENT_SECRET` or per-application webhook HMAC secret.
+`GET /authorize` and provider callbacks remain public browser endpoints. The
+server-only `/api/token`, `/api/apps/register`, `/api/events`, and
+`/api/directory/users*` routes require the resolved source IPv4 to match
+`ID_TRUSTED_APP_CIDRS`. AidaAdmin's `/id/events` receiver requires the source
+IPv4 to match `ID_EVENT_SOURCE_CIDRS`.
+
+Both ingress and application code enforce the CIDR policy. Application code
+uses the TCP socket peer by default. It honors a forwarded client address only
+when the direct peer belongs to `ID_TRUSTED_PROXY_CIDRS`; arbitrary
+`X-Forwarded-For` is never trusted. Production startup/readiness fails when the
+required allowlists are empty. Event IDs remain durable and idempotent, but
+there is no webhook signature in the POC.
+
+CIDR authorization proves that a request came through an approved
+server/network, not which process sent it. Applications sharing an allowed
+egress address can call the same protected endpoints. This is accepted for the
+first-party POC on controlled `LSAidaOffice01`; it is not a trust model for
+unrelated or customer-hosted applications. The `id` redirect contract itself
+remains generic for any configured `X.TLD`; `localsplash.ai` is only the POC
+deployment value.
 
 ### 2.2 AidaAdmin server
 
