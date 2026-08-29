@@ -12,7 +12,7 @@
 
 `localsplash/AidaInfrastructureSetupInstructions` owns canonical specifications, environment setup, deployment automation, and cross-project smoke tests. The deprecated `delme_AidaControl` and `delme_AidaAdmin` repositories must not be used as dependencies or reference implementations.
 
-Every numbered GitHub issue is a bounded autonomous build task. An agent must complete its acceptance criteria and repository-local tests before the next dependent phase begins. Each application repository owns its unit, contract, and integration tests; no separate system-test application is part of the POC.
+Every numbered GitHub issue is a bounded autonomous build task. An agent must complete its acceptance criteria and repository-local tests before the next dependent phase begins. Each application repository owns its unit, contract, and integration tests; no separate system-test application is part of the POC. Unit tests may isolate external interfaces, but every POC integration and acceptance gate uses actual deployed services and dedicated non-production records. An isolated substitute for a provider, PBX, database, notification channel, identity service, or handset cannot satisfy POC completion.
 
 ## 2. Repository issue order
 

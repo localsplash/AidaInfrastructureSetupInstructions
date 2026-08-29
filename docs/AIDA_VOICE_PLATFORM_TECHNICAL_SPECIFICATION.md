@@ -117,10 +117,10 @@ AidaControl is the source of truth for shared runtime contracts and exclusively 
 - `/contracts/openapi` for public AidaControl endpoints;
 - `/contracts/asyncapi` for LiveKit Data topics and payloads;
 - `/contracts/schemas` for Profile, event, command, state, permission, and error definitions;
-- `/contracts/fixtures` for normal, failure, retry, and takeover scenarios;
+- `/contracts/examples` for normal, failure, retry, and takeover payloads;
 - `/generated-clients` or CI release artifacts for Kotlin, Python, and TypeScript consumers;
 - `/postgres/migrations` for hot-path transactional tables;
-- `/postgres/seeds` and integration-test fixtures.
+- `/postgres/seeds` and versioned test datasets.
 
 The OpenAPI definition includes the externally callable LiveKit webhook endpoint even though its authentication scheme is LiveKit signature verification rather than an Aida user token.
 
@@ -130,7 +130,7 @@ Postgres is exclusive to AidaControl and stores the live transactional path: `ca
 
 NocoDB stores slow-moving, human-edited configuration: tenants, UID-to-tenant role mappings, extensions, ring groups/members, profiles, inbound routes, devices/bindings, singleton appearance settings, CRM import records, per-field configuration-source metadata, and related audit/configuration metadata. AidaAdmin's server writes it and AidaControl reads it using separate environment-supplied API credentials. The existing NocoDB instance is MySQL-backed, but clients use only the NocoDB API and avoid backend-specific SQL behavior.
 
-AidaControl tests cover all legal/illegal state transitions, route resolution, profile pinning, tenant isolation, permissions, concurrent takeover races, duplicate idempotency keys, ordered sequence allocation, schema/example validation, generated-client compilation, contract compatibility, Postgres migrations, and NocoDB read compatibility. AidaAdmin tests NocoDB create, validate, seed, and upgrade behavior. OfficePulse, LiveKit, Echo, CRM, Pusher, FCM, and NocoDB adapters have non-networked fakes; transactional integration tests run against disposable Postgres.
+AidaControl unit tests cover all legal/illegal state transitions, route resolution, profile pinning, tenant isolation, permissions, concurrent takeover races, duplicate idempotency keys, ordered sequence allocation, schema/example validation, generated-client compilation, and contract compatibility. Integration tests run against actual Postgres and NocoDB instances populated with versioned test records. POC acceptance uses the real configured OfficePulse, LiveKit Cloud, Pusher, identity, NocoDB, and handset integrations; an isolated substitute never satisfies an integration or acceptance gate.
 
 ### 5.2 `AidaAgent`
 
@@ -147,7 +147,7 @@ Responsibilities:
 - finish only the current utterance during handoff;
 - terminate at the supplied deadline.
 
-Tests use fake STT/LLM/TTS providers and cover profile validation, template rendering, transcripts, tool allowlists/timeouts, no-new-turn behavior, normal drain, and forced drain. Default tests incur no third-party charges.
+Unit tests may isolate provider interfaces while covering profile validation, template rendering, transcripts, tool allowlists/timeouts, no-new-turn behavior, normal drain, and forced drain. Integration and POC acceptance tests dispatch the deployed `aida-prime` agent through LiveKit Cloud and use its configured STT/LLM/TTS services. Provider-backed test runs are required before a release is accepted.
 
 LiveKit Cloud and the already functioning OfficePulse-to-LiveKit SIP trunk are the POC media path. Asterisk passes custom `X-Aida-*` SIP headers. The POC headers are `X-Aida-Call-Session` and `X-Aida-Route-Token`; the route token is opaque, short-lived, single-call, and validated by AidaControl.
 
@@ -173,7 +173,7 @@ Responsibilities:
 - enforce local handoff/cleanup safety deadlines;
 - optionally validate/deploy managed Asterisk includes.
 
-Tests use mocked ARI events and commands and cover reconnect, duplicates, bridge membership, busy/reject/no-answer/answer, and forced Aida removal without dropping the human bridge. A disposable Asterisk 22.10.1 test validates dialplan fixtures where feasible.
+Unit tests cover ARI event handling, reconnect, duplicates, bridge membership, busy/reject/no-answer/answer, and forced Aida removal without dropping the human bridge. Integration and POC acceptance tests use the actual OfficePulse Asterisk 22.10.1, ARI, Realtime MySQL, FastAGI service, managed dialplan, and provisioned endpoints.
 
 The repository contains the companion ARI/Stasis service, a versioned `aida.conf` or `aida-managed.conf` dialplan include, required `extensions.conf` include instructions, ARI account configuration template, local audio assets, codec conversion/deployment scripts, system-service/container definition, firewall guidance, and validation/rollback scripts. Existing OfficePulse configuration is changed only through explicit includes and documented settings.
 
@@ -185,7 +185,7 @@ It manages tenants, UID-to-tenant roles, extensions, ring groups, profiles, rout
 
 AidaAdmin authenticates its users against the LocalSplash identity service (`id`, at `id.localsplash.ai`) using the flow in §13 and holds its own persistent session. For runtime call views and commands, its backend calls AidaControl from an allowlisted server CIDR and supplies verified user/tenant/role/session context. It keeps no password store and issues no AidaControl staff JWT in the POC.
 
-Tests cover accessible components, keyboard navigation, validation/conflict/forbidden states, draft/publish/rollback, CRM override/reset, staff tenant context, cross-tenant leakage, and a minimal browser workflow with fake APIs.
+Unit and component tests cover accessibility, keyboard navigation, validation/conflict/forbidden states, draft/publish/rollback, CRM override/reset, staff tenant context, and cross-tenant leakage. POC browser acceptance runs against the deployed `id`, NocoDB, AidaControl, and OfficePulse integration services with dedicated non-production records.
 
 ### 5.5 `AidaHandset`
 
@@ -200,7 +200,7 @@ Responsibilities:
 - idempotent Take over and later guided controls;
 - recovery after app pause, network loss, and process restart.
 
-Tests cover reducers/ViewModels, ordering/duplicates/gaps/replay, takeover debounce/idempotency, token expiry, forbidden calls, FCM fakes, UI states, and an Android 11 CI build.
+Unit tests cover reducers/ViewModels, ordering/duplicates/gaps/replay, takeover debounce/idempotency, token expiry, forbidden calls, notification handling, and UI states. Device acceptance uses the actual Grandstream GXV3450, provisioning service, Pusher channel, LiveKit Cloud room, and OfficePulse extension.
 
 The APK does not answer the SIP call. The Grandstream SIP application/endpoint answers; AidaHandset observes the server event. For the POC, the existing HTTPS provisioning service supplies the handset MAC address and enrollment bootstrap data. AidaControl validates the MAC-to-device/extension binding from NocoDB, consumes the one-time enrollment credential, and issues a revocable device credential. Android does not attempt to read a restricted hardware MAC address, and the raw Asterisk SIP secret never becomes an Aida credential. SIP secrets are never stored in NocoDB, Pusher payloads, or ordinary APK preferences.
 
@@ -221,9 +221,9 @@ It contains:
 - LiveKit Cloud webhook creation, signing-key selection, test-delivery, rotation, and troubleshooting instructions;
 - staging and production checklists with placeholders for site-specific values.
 
-It does not duplicate application source or own data/API contracts. Its tests validate configuration files, required settings, scripts, TLS/hostname routing, absence of public ARI routes, mock-provider startup, and backup/restore commands.
+It does not duplicate application source or own data/API contracts. Its tests validate configuration files, required settings, scripts, TLS/hostname routing, absence of public ARI routes, connectivity to the configured providers, and backup/restore commands.
 
-There is no AidaSystemTest repository in the initial design. Every source repository owns its unit, contract, integration, and component tests. `AidaInfrastructureSetupInstructions` contains only a small cross-project deployment smoke test that verifies health and one simulated call flow; richer system testing may be designed later if actual operational needs justify it.
+There is no AidaSystemTest repository in the initial design. Every source repository owns its unit, contract, integration, and component tests. `AidaInfrastructureSetupInstructions` contains a cross-project deployment smoke test that verifies health and completes one real non-production telephone call through OfficePulse, LiveKit Cloud, Pusher, and a provisioned handset; richer system testing may be designed later if actual operational needs justify it.
 
 ## 6. Core data model
 
@@ -593,7 +593,7 @@ AidaAdmin provides a simple settings page for the single platform brand:
 - support and legal URLs;
 - logo, icon, and related image upload.
 
-Uploaded files are validated for allowed type and size, assigned opaque names, and stored by the Aida deployment. They are served through the existing application origin under `https://app.aida.localsplash.ai/brand-assets/...`; no additional asset hostname or DNS record is required. AidaControl stores the settings and asset references, and AidaAdmin never accepts an arbitrary executable or remote asset URL as an upload substitute.
+Uploaded files are validated for allowed type and size, assigned opaque names, and stored by the Aida deployment. They are served through the existing application origin under `https://app.aida.localsplash.ai/brand-assets/...`; no additional asset hostname or DNS record is required. AidaAdmin stores the settings and asset references in NocoDB and never accepts an arbitrary executable or remote asset URL as an upload substitute.
 
 Organization-specific white-labeling is deferred until after consultation. The data/API design may avoid choices that make future multi-brand support impossible, but no multi-brand UI, routing, custom-domain resolution, or reseller behavior is implemented or tested in the POC.
 
@@ -611,9 +611,9 @@ Organization-specific white-labeling is deferred until after consultation. The d
 
 ## 17. Definition of done per repository
 
-1. Clean-checkout local setup works.
+1. A clean checkout starts successfully after the documented non-production service credentials are supplied.
 2. Startup validates configuration; `.env.example` is complete.
-3. Unit tests include dummy/fake external integrations and require no production credentials.
+3. Unit tests may isolate external interfaces and require no production credentials; they do not count as provider-integration or POC acceptance tests.
 4. CI runs lint, format, unit, contract, integration, build, and security checks as applicable.
 5. Consumers match a pinned AidaControl contract release.
 6. Containers run non-root where applicable and expose health/readiness.
@@ -622,7 +622,7 @@ Organization-specific white-labeling is deferred until after consultation. The d
 9. Database changes use tested migrations.
 10. README documents architecture, commands, configuration, tests, deployment, rollback, and limitations.
 11. CI produces a versioned release artifact.
-12. Billable/provider smoke tests are separately tagged and disabled by default.
+12. Provider-backed smoke tests use dedicated non-production accounts/data, are separately tagged, and must pass before a release is accepted.
 
 ## 18. System acceptance criteria
 
@@ -646,10 +646,10 @@ Organization-specific white-labeling is deferred until after consultation. The d
 2. `localsplash/new_AidaControl` — greenfield runtime control plane, contracts, and Postgres migrations
 3. `localsplash/new_AidaAdmin` — greenfield administration and staff operations application, including NocoDB schema automation
 4. `localsplash/OfficePulseAidaIntegration` — greenfield FastAGI/ARI/provisioning service and Asterisk deployment assets
-5. `localsplash/AidaAgent` — greenfield LiveKit Cloud worker with fake AI providers for tests
+5. `localsplash/AidaAgent` — greenfield LiveKit Cloud worker validated against the configured LiveKit agent and AI providers
 6. `localsplash/AidaHandset` — greenfield Android 11 application
 7. `localsplash/AidaInfrastructureSetupInstructions` — canonical documentation, setup automation, and deployment smoke tests
 
-AidaControl contracts and deterministic fakes are delivered before dependent integrations so the projects can be built independently against stable interfaces. OfficePulse is customized by installing the integration repository's service, include files, prompts, and configuration; Asterisk itself is never forked.
+AidaControl contracts and deterministic unit tests are delivered before dependent integrations so the projects can be built independently against stable interfaces. Cross-repository integration and acceptance use the real configured POC services and records. OfficePulse is customized by installing the integration repository's service, include files, prompts, and configuration; Asterisk itself is never forked.
 
 The five application repositories identified as greenfield plus the documentation/automation repository are the complete set of new builds for the POC. `id` is the sole existing application codebase and AidaAdmin integrates with it per §13. No Echo repository receives Aida-specific changes. EchoService remains an existing messaging integration and requires changes only if a later, repository-specific implementation plan explicitly identifies one.
