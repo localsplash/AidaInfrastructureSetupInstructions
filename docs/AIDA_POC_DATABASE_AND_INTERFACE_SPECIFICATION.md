@@ -425,6 +425,14 @@ The browser calls only same-origin AidaAdmin endpoints. The server writes
 NocoDB directly and invokes OfficePulseAidaIntegration for provisioning.
 AidaControl is not in the POC configuration-write path.
 
+For runtime call views and commands, AidaAdmin is the browser/session boundary
+and proxies only the supported operations to AidaControl. The AidaAdmin backend
+originates from an IPv4 in `AIDACONTROL_TRUSTED_SERVER_CIDRS` and sends verified
+`X-Aida-Identity-User-Id`, `X-Aida-Tenant-Id`, `X-Aida-Role`,
+`X-Aida-Session-Id`, and `X-Aida-Correlation-Id` context. It strips any
+browser-supplied `X-Aida-*` trust headers. There is no AidaAdmin-to-AidaControl
+shared secret or self-issued staff JWT in the POC.
+
 ```text
 Name: saveTenant
 Interface: HTTP PUT /admin/tenants/{tenantId}
@@ -599,6 +607,27 @@ mismatched tokens reject the media leg and trigger the local fallback. It is
 not a handset credential, LiveKit API credential, or reusable room token.
 
 ### 2.5 AidaControl
+
+#### AidaControl trust boundary
+
+AidaControl uses different trust mechanisms by caller; CIDR trust is not a
+universal substitute for authentication:
+
+| Caller | POC trust mechanism |
+|---|---|
+| AidaAdmin backend | Source IPv4 in `AIDACONTROL_TRUSTED_SERVER_CIDRS` plus verified staff/tenant/session context headers |
+| OfficePulseAidaIntegration | Source IPv4 in `AIDACONTROL_TRUSTED_SERVER_CIDRS` plus call identifiers and idempotency controls |
+| AidaHandset | Device access token; CIDR alone is never accepted |
+| LiveKit webhook | LiveKit signature over the raw body |
+| AidaAgent in LiveKit Cloud | One-time call-scoped bootstrap/route credential |
+| AidaControl to LiveKit | LiveKit workload API key/secret |
+
+AidaControl uses the TCP socket peer unless the direct peer belongs to
+`AIDACONTROL_TRUSTED_PROXY_CIDRS`; only then may it resolve a forwarded client
+IPv4. Both ingress and application enforce allowlists. Production readiness
+fails when required CIDR configuration is empty. CIDR trust establishes the
+approved server/network, not an individual process, so AidaControl still
+enforces tenant, role, call, and device scope.
 
 ```text
 Name: bootstrapCall

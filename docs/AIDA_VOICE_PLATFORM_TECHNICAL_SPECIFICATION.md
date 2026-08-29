@@ -107,7 +107,7 @@ Responsibilities:
 - OfficePulse and agent event ingestion;
 - transactional call-state/event persistence, replay, and LiveKit Data publication;
 - future LocalSplash CRM default import and override tracking, disabled for the POC;
-- validation of staff-session tokens from a single configured issuer (self-issued by AidaAdmin, whose users authenticate against `id`);
+- validation of CIDR-trusted AidaAdmin staff/tenant/session context for runtime call views and commands;
 - reconciliation of orphan/inconsistent resources.
 
 AidaControl is also the source of truth for shared contracts and both Aida-owned data stores. Its repository contains:
@@ -183,7 +183,7 @@ Responsive tenant/staff application at `app.aida.localsplash.ai`.
 
 It manages tenants, UID-to-tenant roles, extensions, ring groups, profiles, routes, devices, retention, platform appearance settings, and permitted call views. For the POC its server writes NocoDB directly and invokes OfficePulseAidaIntegration's private provisioning API; browser code receives neither credential. It never accesses ARI or Asterisk MySQL directly. AidaControl is not in the POC configuration-write path.
 
-AidaAdmin authenticates its users against the LocalSplash identity service (`id`, at `id.localsplash.ai`) using the flow in §13, holds its own persistent session, and self-issues the short-lived staff tokens AidaControl validates. It keeps no password store of its own.
+AidaAdmin authenticates its users against the LocalSplash identity service (`id`, at `id.localsplash.ai`) using the flow in §13 and holds its own persistent session. For runtime call views and commands, its backend calls AidaControl from an allowlisted server CIDR and supplies verified user/tenant/role/session context. It keeps no password store and issues no AidaControl staff JWT in the POC.
 
 Tests cover accessible components, keyboard navigation, validation/conflict/forbidden states, draft/publish/rollback, CRM override/reset, staff tenant context, cross-tenant leakage, and a minimal browser workflow with fake APIs.
 
@@ -211,7 +211,7 @@ Documentation-and-automation repository rather than an application service. It i
 It contains:
 
 - dependency/version matrix and supported deployment topology;
-- complete environment-variable and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB, the `id` client registration for AidaAdmin, the persisted staff-token issuer/secret pair shared between AidaAdmin and AidaControl (never generated at boot), Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
+- complete environment-variable, CIDR, and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB, `ID_TRUSTED_APP_CIDRS`, `ID_EVENT_SOURCE_CIDRS`, `AIDACONTROL_TRUSTED_SERVER_CIDRS`, trusted-proxy CIDRs, Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
 - public wildcard and private OfficePulse DNS, TLS, firewall, mTLS, and ingress instructions;
 - Docker Compose orchestration referencing released project images;
 - scripts that run AidaControl's Postgres migrations and invoke its NocoDB schema commands to create/validate/seed the configuration base;
@@ -535,7 +535,7 @@ Identity for the Aida Voice Platform is the in-scope LocalSplash identity servic
 - **Registration.** AidaAdmin registers itself with `id` on boot as a client application, supplying its callback and webhook URLs. Registration is idempotent: a restart re-asserts the same registration rather than creating a new one.
 - **Sign-in.** AidaAdmin sends the browser to `id`'s `/authorize`, receives an authorization code on its callback, and redeems it with `POST /api/token`. AidaAdmin then holds a persistent session for the user; `id` is not consulted on every request.
 - **Shared UID.** The token response supplies `user.iUserId`, `email`, `displayName`, and `superAdmin`. AidaAdmin uses `iUserId` to resolve `tenant_user`. `superAdmin=true` permits a platform session without a tenant mapping; any other user must already have an enabled tenant mapping.
-- **Revocation, two paths that must both exist.** `id` pushes revocation and identity-change events to AidaAdmin's `POST /id/events` webhook receiver. Because a webhook can be missed while AidaAdmin is down, AidaAdmin also calls `id`'s `GET /api/events?since=<cursor>` on boot to catch up on anything delivered while it was away, then resumes webhook consumption. A revoked user's AidaAdmin session and any outstanding staff tokens for it are invalidated.
+- **Revocation, two paths that must both exist.** `id` pushes revocation and identity-change events to AidaAdmin's `POST /id/events` webhook receiver. Because a webhook can be missed while AidaAdmin is down, AidaAdmin also calls `id`'s `GET /api/events?since=<cursor>` on boot to catch up on anything delivered while it was away, then resumes webhook consumption. A revoked user's AidaAdmin session is invalidated immediately and can no longer proxy AidaControl operations.
 - These two endpoints — the webhook receiver and the catch-up client — belong to **AidaAdmin's** surface, not AidaControl's public API (§11.1).
 
 The `id` application handoff remains generic for configured `PARENT_DOMAIN`
@@ -553,9 +553,19 @@ application process, and is not sufficient for unrelated customer-hosted apps.
 
 For the POC, AidaAdmin's server writes configuration to NocoDB directly and calls OfficePulseAidaIntegration's private provisioning API. Its NocoDB token and provisioning credential never enter browser code. AidaControl reads configuration during call bootstrap and is not in the configuration-write path.
 
-AidaAdmin self-issues the signed, short-lived staff token used for permitted AidaControl call views and commands. AidaControl accepts exactly one configured issuer (`STAFF_TOKEN_ISSUER`) with a persisted shared secret (`STAFF_TOKEN_SECRET`) — a deployment credential that must survive restarts and is never generated at boot.
+For runtime call views and commands, the browser calls AidaAdmin only.
+AidaAdmin resolves the current `id` user, selected tenant, Aida role, and session,
+then proxies an allowlisted operation to AidaControl from a source IPv4 in
+`AIDACONTROL_TRUSTED_SERVER_CIDRS`. It sends trusted `X-Aida-*` context headers
+and strips any such headers supplied by the browser. AidaControl honors them
+only on CIDR-trusted connections and still enforces tenant, role, call, and
+command authorization. No `STAFF_TOKEN_SECRET`, shared application secret, or
+self-issued AidaAdmin staff JWT exists in the POC.
 
-The token includes user, Aida tenant, permissions, session ID, issuer/audience, issue/expiry, and token ID. AidaControl validates the token and performs all Aida authorization itself; permissions such as `voice.routes.manage`, `voice.profiles.manage`, `voice.calls.control`, and `voice.calls.read` derive from verified role/group claims or an explicit allowlist, never from an email suffix.
+This CIDR mode applies only to controlled server traffic. AidaHandset requires
+its device token, LiveKit webhooks require LiveKit signature verification, and
+AidaAgent requires a one-time call-scoped credential; none of those callers can
+gain trust from an allowlisted server CIDR.
 
 ### 13.3 Tenancy and data boundaries
 
