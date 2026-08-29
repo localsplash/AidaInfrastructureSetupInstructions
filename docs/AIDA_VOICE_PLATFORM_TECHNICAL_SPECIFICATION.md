@@ -434,6 +434,8 @@ Each simultaneous call has its own tab, state reducer, LiveKit data connection, 
 
 Pusher may send low-rate state hints, but the app re-fetches authoritative details. FCM may be used only if required for reliable Android background wake; it carries no sensitive content or reusable token. LiveKit Data is the specified transcript/control stream.
 
+Pusher private-channel authorization is served by AidaControl at `POST /v1/realtime/pusher/auth`. The handset authenticates with its device bearer token and may subscribe only to `private-aida-device-{deviceId}` for its own device ID. Channel names contain no tenant ID, extension, DID, or caller data.
+
 ## 10. OfficePulse/Asterisk integration
 
 ### 10.1 Stable dialplan
