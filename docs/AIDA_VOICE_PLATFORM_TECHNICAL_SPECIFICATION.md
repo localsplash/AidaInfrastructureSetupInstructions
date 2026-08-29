@@ -86,6 +86,8 @@ Each repository must contain a README, architecture notes, `.env.example` withou
 
 The implementation stack is fixed for the POC: TypeScript/Node.js for `id`, AidaControl, and OfficePulseAidaIntegration, React/TypeScript for AidaAdmin, Python for AidaAgent, Kotlin for AidaHandset, Docker Compose for initial deployment, and GitHub Actions for CI. Interface contracts use OpenAPI 3.1, AsyncAPI, and JSON Schema.
 
+`localsplash/id` is the only application repository with pre-existing implementation code. `localsplash/new_AidaControl`, `localsplash/new_AidaAdmin`, `localsplash/OfficePulseAidaIntegration`, `localsplash/AidaAgent`, and `localsplash/AidaHandset` are greenfield builds. The deprecated `delme_AidaControl` and `delme_AidaAdmin` repositories are neither dependencies nor reference implementations. `localsplash/AidaInfrastructureSetupInstructions` is the canonical documentation and deployment-automation repository. The dependency-ordered implementation backlog is defined in [POC_REPOSITORY_BUILD_SEQUENCE.md](POC_REPOSITORY_BUILD_SEQUENCE.md).
+
 ### 5.0 `id`
 
 `localsplash/id` is part of the POC application scope. It owns the shared MySQL
@@ -94,7 +96,7 @@ authentication, returns `iUserId` through its one-time application-code flow,
 and delivers revocation/identity events. AidaAdmin maps that UID to a tenant and
 Aida role; it does not create another user/person row.
 
-### 5.1 `AidaControl`
+### 5.1 `AidaControl` (repository: `localsplash/new_AidaControl`)
 
 Authoritative API and call orchestrator.
 
@@ -110,15 +112,13 @@ Responsibilities:
 - validation of CIDR-trusted AidaAdmin staff/tenant/session context for runtime call views and commands;
 - reconciliation of orphan/inconsistent resources.
 
-AidaControl is also the source of truth for shared contracts and both Aida-owned data stores. Its repository contains:
+AidaControl is the source of truth for shared runtime contracts and exclusively owns the transactional Postgres store. Its repository contains:
 
 - `/contracts/openapi` for public AidaControl endpoints;
 - `/contracts/asyncapi` for LiveKit Data topics and payloads;
 - `/contracts/schemas` for Profile, event, command, state, permission, and error definitions;
 - `/contracts/fixtures` for normal, failure, retry, and takeover scenarios;
 - `/generated-clients` or CI release artifacts for Kotlin, Python, and TypeScript consumers;
-- `/nocodb/schema` with a versioned base/table manifest;
-- `/nocodb/scripts` for create, validate, seed, upgrade, and backup checks.
 - `/postgres/migrations` for hot-path transactional tables;
 - `/postgres/seeds` and integration-test fixtures.
 
@@ -130,7 +130,7 @@ Postgres is exclusive to AidaControl and stores the live transactional path: `ca
 
 NocoDB stores slow-moving, human-edited configuration: tenants, UID-to-tenant role mappings, extensions, ring groups/members, profiles, inbound routes, devices/bindings, singleton appearance settings, CRM import records, per-field configuration-source metadata, and related audit/configuration metadata. AidaAdmin's server writes it and AidaControl reads it using separate environment-supplied API credentials. The existing NocoDB instance is MySQL-backed, but clients use only the NocoDB API and avoid backend-specific SQL behavior.
 
-Tests cover all legal/illegal state transitions, route resolution, profile pinning, tenant isolation, permissions, concurrent takeover races, duplicate idempotency keys, ordered sequence allocation, schema/example validation, generated-client compilation, contract compatibility, Postgres migrations, and NocoDB bootstrap/upgrade behavior. OfficePulse, LiveKit, Echo, CRM, Pusher, FCM, and NocoDB adapters have non-networked fakes; transactional integration tests run against disposable Postgres.
+AidaControl tests cover all legal/illegal state transitions, route resolution, profile pinning, tenant isolation, permissions, concurrent takeover races, duplicate idempotency keys, ordered sequence allocation, schema/example validation, generated-client compilation, contract compatibility, Postgres migrations, and NocoDB read compatibility. AidaAdmin tests NocoDB create, validate, seed, and upgrade behavior. OfficePulse, LiveKit, Echo, CRM, Pusher, FCM, and NocoDB adapters have non-networked fakes; transactional integration tests run against disposable Postgres.
 
 ### 5.2 `AidaAgent`
 
@@ -177,7 +177,7 @@ Tests use mocked ARI events and commands and cover reconnect, duplicates, bridge
 
 The repository contains the companion ARI/Stasis service, a versioned `aida.conf` or `aida-managed.conf` dialplan include, required `extensions.conf` include instructions, ARI account configuration template, local audio assets, codec conversion/deployment scripts, system-service/container definition, firewall guidance, and validation/rollback scripts. Existing OfficePulse configuration is changed only through explicit includes and documented settings.
 
-### 5.4 `AidaAdmin`
+### 5.4 `AidaAdmin` (repository: `localsplash/new_AidaAdmin`)
 
 Responsive tenant/staff application at `app.aida.localsplash.ai`.
 
@@ -202,7 +202,7 @@ Responsibilities:
 
 Tests cover reducers/ViewModels, ordering/duplicates/gaps/replay, takeover debounce/idempotency, token expiry, forbidden calls, FCM fakes, UI states, and an Android 11 CI build.
 
-The APK does not answer the SIP call. The Grandstream SIP application/endpoint answers; AidaHandset observes the server event. For the POC, the user manually enters the extension and an enrollment credential. The raw Asterisk SIP secret must not become the Aida credential. The OfficePulseAidaIntegration service verifies an extension-specific enrollment challenge and AidaControl issues a revocable device credential. SIP secrets are never stored in NocoDB, Pusher payloads, or ordinary APK preferences.
+The APK does not answer the SIP call. The Grandstream SIP application/endpoint answers; AidaHandset observes the server event. For the POC, the existing HTTPS provisioning service supplies the handset MAC address and enrollment bootstrap data. AidaControl validates the MAC-to-device/extension binding from NocoDB, consumes the one-time enrollment credential, and issues a revocable device credential. Android does not attempt to read a restricted hardware MAC address, and the raw Asterisk SIP secret never becomes an Aida credential. SIP secrets are never stored in NocoDB, Pusher payloads, or ordinary APK preferences.
 
 ### 5.6 `AidaInfrastructureSetupInstructions`
 
@@ -214,7 +214,7 @@ It contains:
 - complete environment-variable, CIDR, and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB, `ID_TRUSTED_APP_CIDRS`, `ID_EVENT_SOURCE_CIDRS`, `AIDACONTROL_TRUSTED_SERVER_CIDRS`, trusted-proxy CIDRs, Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
 - public wildcard and private OfficePulse DNS, TLS, firewall, mTLS, and ingress instructions;
 - Docker Compose orchestration referencing released project images;
-- scripts that run AidaControl's Postgres migrations and invoke its NocoDB schema commands to create/validate/seed the configuration base;
+- scripts that run AidaControl's Postgres migrations and invoke AidaAdmin's NocoDB schema commands to create, validate, and seed the configuration base;
 - `id` client registration and configuration instructions for AidaAdmin;
 - OfficePulse integration installation order and verification;
 - health-check, smoke-test, backup, restore, upgrade, and rollback runbooks;
@@ -345,7 +345,7 @@ Suggestions contain an ID, label, typed action, constrained parameters, expiry, 
 
 ## 9. Realtime delivery and Pusher
 
-The LiveKit Data contract is defined in `AidaControl/contracts/asyncapi` and is normative for AidaControl, AidaAgent, and AidaHandset. Payloads use UTF-8 JSON. A durable AidaControl event has this envelope:
+The LiveKit Data contract is defined in `new_AidaControl/contracts/asyncapi` and is normative for AidaControl, AidaAgent, and AidaHandset. Payloads use UTF-8 JSON. A durable AidaControl event has this envelope:
 
 ```json
 {
@@ -642,14 +642,14 @@ Organization-specific white-labeling is deferred until after consultation. The d
 
 ## 19. Final GitHub project list and build order
 
-1. `AidaControl`, including contracts, Postgres migrations, NocoDB schema automation, and all integration fakes
-2. `OfficePulseAidaIntegration`, including its ARI simulator and Asterisk deployment assets
-3. `AidaAgent` with fake AI providers
-4. `AidaHandset`
-5. `AidaAdmin`
-6. `AidaInfrastructureSetupInstructions`
-7. Staging OfficePulse end-to-end integration using the setup repository's smoke test
+1. `localsplash/id` — existing identity application; complete the Aida integration requirements without rebuilding it
+2. `localsplash/new_AidaControl` — greenfield runtime control plane, contracts, and Postgres migrations
+3. `localsplash/new_AidaAdmin` — greenfield administration and staff operations application, including NocoDB schema automation
+4. `localsplash/OfficePulseAidaIntegration` — greenfield FastAGI/ARI/provisioning service and Asterisk deployment assets
+5. `localsplash/AidaAgent` — greenfield LiveKit Cloud worker with fake AI providers for tests
+6. `localsplash/AidaHandset` — greenfield Android 11 application
+7. `localsplash/AidaInfrastructureSetupInstructions` — canonical documentation, setup automation, and deployment smoke tests
 
-AidaControl contracts and deterministic fakes are delivered first so the other projects can be built independently. OfficePulse is customized by installing the integration repository's service, include files, prompts, and configuration; Asterisk itself is never forked.
+AidaControl contracts and deterministic fakes are delivered before dependent integrations so the projects can be built independently against stable interfaces. OfficePulse is customized by installing the integration repository's service, include files, prompts, and configuration; Asterisk itself is never forked.
 
-The six names above are the complete list of new GitHub repositories for the initial implementation. `id` is an existing LocalSplash service that AidaAdmin integrates with per §13; no Echo repository receives Aida-specific changes. EchoService remains an existing messaging integration and requires changes only if its own repository-specific implementation plan explicitly identifies one.
+The five application repositories identified as greenfield plus the documentation/automation repository are the complete set of new builds for the POC. `id` is the sole existing application codebase and AidaAdmin integrates with it per §13. No Echo repository receives Aida-specific changes. EchoService remains an existing messaging integration and requires changes only if a later, repository-specific implementation plan explicitly identifies one.

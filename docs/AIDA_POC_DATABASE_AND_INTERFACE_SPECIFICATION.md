@@ -760,8 +760,8 @@ Parameters:
 The repositories in scope are:
 
 1. `localsplash/id`
-2. `localsplash/AidaAdmin`
-3. `localsplash/AidaControl`
+2. `localsplash/new_AidaAdmin`
+3. `localsplash/new_AidaControl`
 4. `localsplash/OfficePulseAidaIntegration`
 5. `localsplash/AidaAgent`
 6. `localsplash/AidaHandset`

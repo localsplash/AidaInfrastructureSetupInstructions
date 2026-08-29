@@ -20,6 +20,8 @@ Markdown, PowerShell/shell automation, Docker Compose, GitHub Actions
 
 [Normative POC database and input-interface specification](https://github.com/localsplash/AidaInfrastructureSetupInstructions/blob/main/docs/AIDA_POC_DATABASE_AND_INTERFACE_SPECIFICATION.md)
 
+[Dependency-ordered POC repository build sequence](https://github.com/localsplash/AidaInfrastructureSetupInstructions/blob/main/docs/POC_REPOSITORY_BUILD_SEQUENCE.md)
+
 ## Project invariant
 
 This is documentation and automation, not a long-running application service.
