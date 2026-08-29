@@ -1,0 +1,617 @@
+# Aida Office POC — Database and Input Interface Specification
+
+Status: Normative for the initial POC
+Platform domain: `localsplash.ai`
+PBX: OfficePulse / Asterisk 22.10.1 Realtime
+Media and voice agent: LiveKit Cloud / `aida-prime`
+
+This document is the concise build contract for the POC. Where the broader
+technical specification describes a later or more general configuration API,
+this document controls the initial POC.
+
+## 1. Database specifications
+
+### 1.1 `id_db`
+
+| Property | Value |
+|---|---|
+| Database type | MySQL |
+| Server home | `LSAidaOffice01` |
+| Owning application | `localsplash/id` |
+| Purpose | Shared platform identity, authentication sessions, application handoff codes, and revocation events |
+
+`id_tbl_User.iUserId` is the single platform-wide person identifier. Aida does
+not create a second user/person record and does not duplicate the person's
+name, email, password, or provider identities.
+
+Existing `localsplash/id` tables:
+
+#### `id_tbl_User`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `iUserId` | BIGINT | Primary key, auto-increment |
+| `email` | VARCHAR(255) | Nullable |
+| `displayName` | VARCHAR(255) | Nullable |
+| `dtCreated` | DATETIME(3) | Required |
+| `dtLastLogin` | DATETIME(3) | Nullable |
+
+#### `id_tbl_Identity`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `iIdentityId` | BIGINT | Primary key |
+| `iUserId` | BIGINT | FK to `id_tbl_User` |
+| `provider` | VARCHAR(32) | Required |
+| `subject` | VARCHAR(255) | Required |
+| `email` | VARCHAR(255) | Nullable |
+| `dtCreated` | DATETIME(3) | Required |
+
+Unique: `(provider, subject)`.
+
+#### `id_tbl_Session`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `sSessionId` | CHAR(64) | Primary key |
+| `iUserId` | BIGINT | FK to `id_tbl_User` |
+| `bSuperAdmin` | BOOLEAN | Required |
+| `sProvider` | VARCHAR(32) | Nullable |
+| `sSubject` | VARCHAR(255) | Nullable |
+| `dtCreated` | DATETIME(3) | Required |
+| `dtLastSeen` | DATETIME(3) | Nullable |
+| `dtRevoked` | DATETIME(3) | Nullable |
+
+`id_tbl_AuthCode`, `id_tbl_SsoNonce`, `id_tbl_App`, `id_tbl_Event`, and
+`id_tbl_Delivery` retain their schemas and ownership from `localsplash/id`.
+
+### 1.2 `AidaConfiguration`
+
+| Property | Value |
+|---|---|
+| Database type | NocoDB cloud base, MySQL-backed implementation |
+| Server home | Existing cloud NocoDB service |
+| Owning application | AidaAdmin server |
+| Runtime reader | AidaControl |
+| Purpose | Slow-moving tenant, telephony intent, DID routing, and prompt configuration |
+
+Only server-side AidaAdmin code holds the NocoDB API token. Browser code,
+AidaHandset, OfficePulse, and Asterisk never access NocoDB directly.
+
+#### `tenant`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `name` | String | Required |
+| `slug` | String | Required, unique |
+| `asterisk_context` | String | Required, unique |
+| `caller_id_name` | String | Nullable |
+| `caller_id_number` | E.164 String | Nullable |
+| `enabled` | Boolean | Default `true` |
+| `created_at` | Timestamp | Required |
+| `updated_at` | Timestamp | Required |
+
+#### `tenant_user`
+
+This is a UID mapping and Aida authorization record, not another user record.
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `tenant_id` | UUID | Nullable only for `SUPER_ADMIN` |
+| `identity_user_id` | BIGINT | Required; `id_db.id_tbl_User.iUserId` |
+| `role` | Enum | `SUPER_ADMIN`, `TENANT_ADMIN`, or `USER` |
+| `enabled` | Boolean | Default `true` |
+| `created_at` | Timestamp | Required |
+| `updated_at` | Timestamp | Required |
+
+Unique: `(tenant_id, identity_user_id)`. A Super Admin may have one record with
+`tenant_id = null`. Name and email are returned by `id` at login and are not
+copied here.
+
+#### `extension`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `tenant_id` | UUID | Required |
+| `identity_user_id` | BIGINT | Nullable; assignee in `id_tbl_User` |
+| `extension_number` | String | Required |
+| `display_name` | String | Required |
+| `caller_id_name` | String | Nullable; tenant default when absent |
+| `caller_id_number` | E.164 String | Nullable; tenant default when absent |
+| `asterisk_context` | String | Required |
+| `provisioning_profile` | String | Nullable |
+| `enabled` | Boolean | Default `true` |
+| `created_at` | Timestamp | Required |
+| `updated_at` | Timestamp | Required |
+
+Unique: `(tenant_id, extension_number)`. One user may have multiple extensions;
+one extension has zero or one user. SIP secrets never enter NocoDB.
+
+#### `ring_group`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `tenant_id` | UUID | Required |
+| `name` | String | Required |
+| `virtual_extension` | String | Required |
+| `asterisk_context` | String | Required |
+| `ring_strategy` | Enum | POC value `RING_ALL` |
+| `ring_timeout_seconds` | Integer | Default `20` |
+| `music_on_hold_class` | String | Nullable |
+| `caller_id_name` | String | Nullable |
+| `caller_id_number` | E.164 String | Nullable |
+| `enabled` | Boolean | Default `true` |
+| `created_at` | Timestamp | Required |
+| `updated_at` | Timestamp | Required |
+
+Unique: `(tenant_id, virtual_extension)`.
+
+#### `ring_group_member`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `ring_group_id` | UUID | Required |
+| `extension_id` | UUID | Required |
+| `sort_order` | Integer | Required |
+| `enabled` | Boolean | Default `true` |
+
+Unique: `(ring_group_id, extension_id)`.
+
+#### `assistant_profile`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `tenant_id` | UUID | Required |
+| `name` | String | Required |
+| `business_name` | String | Required |
+| `prompt` | Long text | Required |
+| `tone` | String | Nullable |
+| `objective` | Long text | Nullable |
+| `opening_statement` | Long text | Nullable |
+| `transfer_statement` | Long text | Nullable |
+| `failed_transfer_statement` | Long text | Nullable |
+| `enabled` | Boolean | Default `true` |
+| `created_at` | Timestamp | Required |
+| `updated_at` | Timestamp | Required |
+
+LiveKit model, STT, TTS, and voice defaults are inherited from predefined agent
+`aida-prime`; they are not stored or sent for the POC.
+
+#### `did_route`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `tenant_id` | UUID | Required |
+| `did_e164` | E.164 String | Required, unique |
+| `assistant_profile_id` | UUID | Required |
+| `destination_type` | Enum | `EXTENSION` or `RING_GROUP` |
+| `destination_extension_id` | UUID | Nullable |
+| `destination_ring_group_id` | UUID | Nullable |
+| `screening_enabled` | Boolean | Default `true` |
+| `enabled` | Boolean | Default `true` |
+| `created_at` | Timestamp | Required |
+| `updated_at` | Timestamp | Required |
+
+Exactly one destination FK matches `destination_type`. The destination is used
+for takeover and failure fallback. Normal inbound order is always:
+
+```text
+DID -> recording disclosure -> Aida/LiveKit screening -> destination on takeover
+```
+
+### 1.3 `aida_runtime`
+
+| Property | Value |
+|---|---|
+| Database type | PostgreSQL |
+| Server home | `LSAidaOffice01` |
+| Owning application | AidaControl exclusively |
+| Purpose | Transactional active-call state, ordered events, and commands |
+
+#### `call_session`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `asterisk_linked_id` | String | Required, unique |
+| `tenant_id` | UUID | Required |
+| `did_route_id` | UUID | Required |
+| `assistant_profile_id` | UUID | Required |
+| `profile_snapshot` | JSONB | Required |
+| `caller_number` | String | Nullable |
+| `room_name` | String | Required, unique |
+| `agent_participant_sid` | String | Nullable |
+| `destination_type` | String | Required |
+| `destination_id` | UUID | Required |
+| `state` | String | Required |
+| `version` | Integer | Required |
+| `created_at` | Timestamp | Required |
+| `ended_at` | Timestamp | Nullable |
+
+#### `call_event`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `call_session_id` | UUID | Required |
+| `sequence_number` | Integer | Required |
+| `event_type` | String | Required |
+| `payload` | JSONB | Required |
+| `created_at` | Timestamp | Required |
+
+Unique: `(call_session_id, sequence_number)`.
+
+#### `control_command`
+
+| Column | Type | Requirement |
+|---|---|---|
+| `id` | UUID | Primary key |
+| `call_session_id` | UUID | Required |
+| `idempotency_key` | String | Required |
+| `command_type` | String | Required |
+| `expected_call_version` | Integer | Required |
+| `payload` | JSONB | Required |
+| `status` | String | Required |
+| `created_at` | Timestamp | Required |
+| `completed_at` | Timestamp | Nullable |
+
+Unique: `(call_session_id, idempotency_key)`.
+
+### 1.4 OfficePulse Asterisk Realtime database
+
+| Property | Value |
+|---|---|
+| Database type | MySQL |
+| Server home | `OfficePulse` |
+| Owning application | OfficePulse / Asterisk 22.10.1 |
+| Writer | OfficePulseAidaIntegration provisioning API |
+| Purpose | Operational PJSIP endpoints, authentication, realtime dialplan, CDR, and CEL |
+
+Use the installed Asterisk 22.10.1 schemas:
+
+| Table | POC use |
+|---|---|
+| `ps_endpoints` | Endpoint identity, context, caller ID, transport, and codecs |
+| `ps_auths` | Generated SIP authentication secret |
+| `ps_aors` | Endpoint address-of-record and registration configuration |
+| `extensions` | Realtime extension, ring-group, and DID-to-FastAGI dialplan rows |
+| `cdr` | Asterisk call-detail records |
+| `cel` | Asterisk channel-event records |
+
+The SIP secret is stored only in `ps_auths`, returned once to AidaAdmin after
+creation/rotation, and optionally passed to the existing provisioning server.
+It is never stored in NocoDB, Postgres, browser storage, or logs.
+
+No configuration sync or reconciliation job exists in the POC. AidaAdmin saves
+the intended record and immediately invokes OfficePulseAidaIntegration to write
+the corresponding Asterisk realtime rows. Provisioning failures are returned to
+the administrator; later discrepancies surface as explicit runtime errors.
+
+## 2. Application input interface specifications
+
+### 2.1 `id`
+
+#### Application login
+
+```text
+Name: authorizeApplication
+Interface: HTTP GET https://id.localsplash.ai/authorize
+Parameters:
+  redirect_uri: HTTPS URL under localsplash.ai
+  state: opaque CSRF value
+Result:
+  HTTP redirect to redirect_uri with code and state
+```
+
+#### Redeem application code
+
+```text
+Name: redeemApplicationCode
+Interface: HTTP POST https://id.localsplash.ai/api/token
+Parameters:
+  code: string
+  redirect_uri: string
+  client_secret: ID_CLIENT_SECRET
+Result:
+  user.iUserId: integer
+  user.email: string
+  user.displayName: string
+  user.superAdmin: boolean
+  identity.provider: string
+  identity.subject: string
+  identities[]: provider, subject, email
+```
+
+`id` creates/resolves `id_tbl_User` during successful provider authentication.
+AidaAdmin uses `user.iUserId` to find `tenant_user`. A Super Admin may enter
+without a tenant mapping when `user.superAdmin = true`. A non-Super-Admin with
+no enabled `tenant_user` record is denied during the POC.
+
+#### Register AidaAdmin revocation webhook
+
+```text
+Name: registerApplicationWebhook
+Interface: HTTP POST https://id.localsplash.ai/api/apps/register
+Parameters:
+  client_secret: ID_CLIENT_SECRET
+  name: AidaAdmin
+  webhook_url: https://app.aida.localsplash.ai/id/events
+Result:
+  origin: string
+  secret: webhook signing secret
+  events: string[]
+```
+
+#### Receive identity events
+
+```text
+Name: receiveIdentityEvent
+Interface: HTTP POST https://app.aida.localsplash.ai/id/events
+Headers:
+  X-Id-Event
+  X-Id-Event-Id
+  X-Id-Timestamp
+  X-Id-Signature
+Body:
+  id: integer
+  type: ping | session.revoked | user.merged | identity.linked | identity.unlinked
+  occurredAt: timestamp
+  data: object
+```
+
+#### Catch up identity events
+
+```text
+Name: listIdentityEvents
+Interface: HTTP GET https://id.localsplash.ai/api/events
+Headers:
+  X-Id-Client-Secret: ID_CLIENT_SECRET
+Parameters:
+  since: last durably processed event ID
+```
+
+### 2.2 AidaAdmin server
+
+The browser calls only same-origin AidaAdmin endpoints. The server writes
+NocoDB directly and invokes OfficePulseAidaIntegration for provisioning.
+AidaControl is not in the POC configuration-write path.
+
+```text
+Name: saveTenant
+Interface: HTTP PUT /admin/tenants/{tenantId}
+Parameters:
+  name, slug, asteriskContext, callerIdName?, callerIdNumber?, enabled
+```
+
+```text
+Name: saveTenantUser
+Interface: HTTP PUT /admin/tenants/{tenantId}/users/{identityUserId}
+Parameters:
+  role: TENANT_ADMIN | USER
+  enabled: boolean
+```
+
+```text
+Name: grantSuperAdmin
+Interface: HTTP PUT /admin/super-admins/{identityUserId}
+Parameters:
+  enabled: boolean
+Restriction:
+  authenticated caller must already be SUPER_ADMIN
+```
+
+```text
+Name: createExtension
+Interface: HTTP POST /admin/extensions
+Parameters:
+  tenantId, identityUserId?, extensionNumber, displayName,
+  callerIdName?, callerIdNumber?, provisioningProfile?
+Result:
+  extensionId, extensionNumber, sipUsername, sipSecret, provisioningResult?
+```
+
+```text
+Name: updateExtension
+Interface: HTTP PUT /admin/extensions/{extensionId}
+Parameters:
+  identityUserId?, displayName, callerIdName?, callerIdNumber?,
+  provisioningProfile?, enabled
+```
+
+```text
+Name: rotateSipSecret
+Interface: HTTP POST /admin/extensions/{extensionId}/rotate-secret
+Parameters:
+  reprovisionDevice: boolean
+Result:
+  sipSecret, provisioningResult?
+```
+
+```text
+Name: saveRingGroup
+Interface: HTTP PUT /admin/ring-groups/{ringGroupId}
+Parameters:
+  tenantId, name, virtualExtension, ringTimeoutSeconds,
+  musicOnHoldClass?, callerIdName?, callerIdNumber?,
+  memberExtensionIds[], enabled
+```
+
+```text
+Name: saveAssistantProfile
+Interface: HTTP PUT /admin/profiles/{profileId}
+Parameters:
+  tenantId, name, businessName, prompt, tone?, objective?,
+  openingStatement?, transferStatement?, failedTransferStatement?, enabled
+```
+
+```text
+Name: saveDidRoute
+Interface: HTTP PUT /admin/did-routes/{didRouteId}
+Parameters:
+  tenantId, didE164, assistantProfileId,
+  destinationType: EXTENSION | RING_GROUP,
+  destinationId, screeningEnabled, enabled
+```
+
+### 2.3 OfficePulseAidaIntegration provisioning API
+
+Private LAN API. Only AidaAdmin's server may call it.
+
+```text
+Name: provisionExtension
+Interface: HTTP POST /v1/provisioning/extensions
+Parameters:
+  requestId, tenantId, extensionId, extensionNumber, context,
+  displayName, callerIdName?, callerIdNumber?, provisioningProfile?
+Result:
+  sipUsername, sipSecret, provisioningResult?
+```
+
+```text
+Name: updateProvisionedExtension
+Interface: HTTP PUT /v1/provisioning/extensions/{extensionId}
+Parameters:
+  extensionNumber, context, displayName, callerIdName?,
+  callerIdNumber?, provisioningProfile?, enabled
+```
+
+```text
+Name: rotateProvisionedExtensionSecret
+Interface: HTTP POST /v1/provisioning/extensions/{extensionId}/rotate-secret
+Parameters:
+  requestId, reprovisionDevice
+Result:
+  sipSecret, provisioningResult?
+```
+
+```text
+Name: provisionRingGroup
+Interface: HTTP PUT /v1/provisioning/ring-groups/{ringGroupId}
+Parameters:
+  tenantId, virtualExtension, context, memberExtensions[],
+  ringTimeoutSeconds, musicOnHoldClass?, callerIdName?,
+  callerIdNumber?, enabled
+```
+
+```text
+Name: provisionDid
+Interface: HTTP PUT /v1/provisioning/dids/{didRouteId}
+Parameters:
+  didE164, context, fastAgiPath=/bootstrap, enabled
+```
+
+### 2.4 OfficePulseAidaIntegration FastAGI
+
+```text
+Name: bootstrapInboundCall
+Interface: FastAGI TCP agi://aida-integration.internal:4573/bootstrap
+Inputs from Asterisk:
+  agi_uniqueid
+  agi_channel
+  agi_callerid
+  agi_extension
+  ASTERISK_LINKEDID
+  OFFICEPULSE_INSTANCE_ID
+Outputs set as Asterisk channel variables:
+  AIDA_DISPOSITION: SCREEN | FALLBACK | REJECT
+  AIDA_CALL_SESSION_ID
+  AIDA_ROOM_NAME
+  AIDA_SIP_DESTINATION
+  AIDA_ROUTE_TOKEN
+  AIDA_FALLBACK_CONTEXT
+  AIDA_FALLBACK_EXTENSION
+```
+
+### 2.5 AidaControl
+
+```text
+Name: bootstrapCall
+Interface: HTTP POST /v1/integrations/officepulse/calls/bootstrap
+Parameters:
+  officePulseInstanceId, asteriskLinkedId, callerNumber?, didE164
+Result:
+  disposition: SCREEN | FALLBACK | REJECT
+  callSessionId?, roomName?, sipDestination?, routeToken?,
+  destinationType?, destinationId?
+```
+
+`bootstrapCall` reads NocoDB, snapshots the resolved profile into Postgres,
+dispatches `aida-prime`, waits for readiness, and returns the LiveKit SIP room
+destination. Agent dispatch creates the room if it does not exist.
+
+```text
+Name: submitCallCommand
+Interface: HTTP POST /v1/calls/{callSessionId}/commands
+Parameters:
+  commandType, expectedCallVersion, idempotencyKey, payload?
+```
+
+```text
+Name: receiveLiveKitWebhook
+Interface: HTTP POST /v1/integrations/livekit/webhooks
+Authentication:
+  LiveKit signed webhook over the raw request body
+```
+
+### 2.6 AidaControl to LiveKit Cloud
+
+```text
+Name: dispatchAidaPrime
+Interface: LiveKit AgentDispatchService.CreateDispatch
+Parameters:
+  room, agentName=aida-prime,
+  metadata={callSessionId, bootstrapToken}
+```
+
+```text
+Name: publishRoomData
+Interface: LiveKit RoomServiceClient.sendData
+Parameters:
+  room, payload, kind=reliable, topic, destinationSids?
+```
+
+### 2.7 AidaHandset
+
+```text
+Name: receiveCallAlert
+Interface: Pusher private-channel event aida.call.started
+Parameters:
+  eventId, callSessionId, occurredAt
+```
+
+```text
+Name: getActiveCall
+Interface: HTTP GET /v1/calls/{callSessionId}
+Result:
+  callSession, liveKitUrl, participantToken
+```
+
+```text
+Name: requestTakeover
+Interface: HTTP POST /v1/calls/{callSessionId}/commands
+Parameters:
+  commandType=TAKEOVER, expectedCallVersion, idempotencyKey
+```
+
+## POC application scope
+
+The repositories in scope are:
+
+1. `localsplash/id`
+2. `localsplash/AidaAdmin`
+3. `localsplash/AidaControl`
+4. `localsplash/OfficePulseAidaIntegration`
+5. `localsplash/AidaAgent`
+6. `localsplash/AidaHandset`
+7. `localsplash/AidaInfrastructureSetupInstructions`
+
+No database synchronization service, configuration-write API in AidaControl,
+queue implementation, first-party WebSocket service, or cross-project system
+test repository is part of the POC.
