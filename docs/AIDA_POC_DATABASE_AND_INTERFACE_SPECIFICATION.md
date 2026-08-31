@@ -65,7 +65,7 @@ Unique: `(provider, subject)`.
 `id_tbl_AuthCode`, `id_tbl_SsoNonce`, `id_tbl_App`, `id_tbl_Event`, and
 `id_tbl_Delivery` retain their schemas and ownership from `localsplash/id`.
 
-### 1.2 `AidaConfiguration`
+### 1.2 `AidaAdmin`
 
 | Property | Value |
 |---|---|
