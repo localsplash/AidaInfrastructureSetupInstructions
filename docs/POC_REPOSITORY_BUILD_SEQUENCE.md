@@ -4,7 +4,7 @@
 
 `localsplash/id` is the only application repository with pre-existing code. The following application repositories are greenfield builds:
 
-- `localsplash/new_AidaControl`
+- `localsplash/AidaControl`
 - `localsplash/new_AidaAdmin`
 - `localsplash/OfficePulseAidaIntegration`
 - `localsplash/AidaAgent`
@@ -18,12 +18,12 @@ Every numbered GitHub issue is a bounded autonomous build task. An agent must co
 
 | Repository | Ordered implementation issues |
 | --- | --- |
-| `new_AidaControl` | #11 bootstrap; #12 contracts/Postgres; #13 NocoDB reads/DID resolution; #14 call bootstrap/LiveKit; #8 SIP route token; #9 handset enrollment/call API/Pusher; #15 commands/takeover/recovery; #10 trust boundary |
+| `AidaControl` | #11 bootstrap; #12 contracts/MySQL 8; #13 NocoDB reads/DID resolution; #14 call bootstrap/LiveKit; #8 SIP route token; #9 handset enrollment/call API/Pusher; #15 commands/takeover/recovery; #10 trust boundary |
 | `new_AidaAdmin` | #10 bootstrap; #8 identity; #11 NocoDB schema; #12 tenants/users/extensions/ring groups/provisioning; #13 profiles/routes/appearance; #9 AidaControl runtime proxy; #14 live operations UI |
 | `OfficePulseAidaIntegration` | #1 bootstrap; #2 Asterisk Realtime provisioning; #3 FastAGI/LiveKit SIP routing; #4 ARI takeover; #5 disclosure/fallback/recording/hold; #6 MAC provisioning; #7 hardening/deployment |
 | `AidaAgent` | #1 bootstrap; #2 dispatch metadata/route token/prompt; #3 voice session/transcript lifecycle; #4 barge-in/failed-transfer/graceful handoff; #5 guidance/tools; #6 deployment/reconnect/observability |
 | `AidaHandset` | #1 bootstrap; #2 MAC enrollment; #3 Pusher/recovery; #4 LiveKit transcript UI; #5 Take over; #6 simultaneous calls/lifecycle; #7 GXV3450 release hardening |
-| `AidaInfrastructureSetupInstructions` | #1 repository/environment matrix; #13 existing id deployment; #2 networking; #3 Postgres; #4 NocoDB; #5 LiveKit/Pusher/provisioning; #6 OfficePulse; #7 release composition/smoke test/operations |
+| `AidaInfrastructureSetupInstructions` | #1 repository/environment matrix; #13 existing id deployment; #2 networking; #3 MySQL 8; #4 NocoDB; #5 LiveKit/Pusher/provisioning; #6 OfficePulse; #7 release composition/smoke test/operations |
 
 The issue body in GitHub is authoritative for deliverables, acceptance criteria, tests, and direct dependencies.
 

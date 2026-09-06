@@ -23,7 +23,7 @@ The system consists of independently buildable projects joined by versioned cont
 - **OfficePulse call recording** remains authoritative for recording media, disclosure playback, file lifecycle, and any existing recording retention controls. Aida does not make a second recording.
 - **LiveKit** supplies realtime media and voice-agent facilities. It is not the system of record for profiles or calls.
 - **LocalSplash CRM** supplies onboarding defaults. CRM values retain source metadata and can be overridden by precise Aida configuration.
-- **`id`** is the LocalSplash identity service at `id.localsplash.ai` and is an in-scope Aida Office project. It owns the shared `id_db.id_tbl_User` person identifier, provider identities, sign-in (including Google, Microsoft, and UISP), sessions, and revocation. Aida stores only an `iUserId`-to-tenant role mapping and no duplicate person, password, name, email, or provider-identity record.
+- **`id`** is the LocalSplash identity service at `id.localsplash.ai` and is an in-scope Aida Office project. It owns the shared `platform_db.identity_tbl_User` person identifier, provider identities, sign-in (including Google, Microsoft, and UISP), sessions, and revocation. Aida stores only an `iUserId`-to-tenant role mapping and no duplicate person, password, name, email, or provider-identity record.
 - **EchoService** is Echo's messaging service layer.
 - **Pusher Channels** supplies lightweight call-arrival and call-state notifications. Live details and stream credentials come from AidaControl.
 
@@ -86,17 +86,17 @@ Each repository must contain a README, architecture notes, `.env.example` withou
 
 The implementation stack is fixed for the POC: TypeScript/Node.js for `id`, AidaControl, and OfficePulseAidaIntegration, React/TypeScript for AidaAdmin, Python for AidaAgent, Kotlin for AidaHandset, Docker Compose for initial deployment, and GitHub Actions for CI. Interface contracts use OpenAPI 3.1, AsyncAPI, and JSON Schema.
 
-`localsplash/id` is the only application repository with pre-existing implementation code. `localsplash/new_AidaControl`, `localsplash/new_AidaAdmin`, `localsplash/OfficePulseAidaIntegration`, `localsplash/AidaAgent`, and `localsplash/AidaHandset` are greenfield builds. The deprecated `delme_AidaControl` and `delme_AidaAdmin` repositories are neither dependencies nor reference implementations. `localsplash/AidaInfrastructureSetupInstructions` is the canonical documentation and deployment-automation repository. The dependency-ordered implementation backlog is defined in [POC_REPOSITORY_BUILD_SEQUENCE.md](POC_REPOSITORY_BUILD_SEQUENCE.md).
+`localsplash/id` is the only application repository with pre-existing implementation code. `localsplash/AidaControl`, `localsplash/new_AidaAdmin`, `localsplash/OfficePulseAidaIntegration`, `localsplash/AidaAgent`, and `localsplash/AidaHandset` are greenfield builds. The deprecated `delme_AidaControl` and `delme_AidaAdmin` repositories are neither dependencies nor reference implementations. `localsplash/AidaInfrastructureSetupInstructions` is the canonical documentation and deployment-automation repository. The dependency-ordered implementation backlog is defined in [POC_REPOSITORY_BUILD_SEQUENCE.md](POC_REPOSITORY_BUILD_SEQUENCE.md).
 
 ### 5.0 `id`
 
 `localsplash/id` is part of the POC application scope. It owns the shared MySQL
-`id_db`, creates or resolves `id_tbl_User` during successful provider
+`platform_db`, creates or resolves `identity_tbl_User` during successful provider
 authentication, returns `iUserId` through its one-time application-code flow,
 and delivers revocation/identity events. AidaAdmin maps that UID to a tenant and
 Aida role; it does not create another user/person row.
 
-### 5.1 `AidaControl` (repository: `localsplash/new_AidaControl`)
+### 5.1 `AidaControl` (repository: `localsplash/AidaControl`)
 
 Authoritative API and call orchestrator.
 
@@ -112,25 +112,25 @@ Responsibilities:
 - validation of CIDR-trusted AidaAdmin staff/tenant/session context for runtime call views and commands;
 - reconciliation of orphan/inconsistent resources.
 
-AidaControl is the source of truth for shared runtime contracts and exclusively owns the transactional Postgres store. Its repository contains:
+AidaControl is the source of truth for shared runtime contracts and exclusively owns the transactional MySQL 8 store. Its repository contains:
 
 - `/contracts/openapi` for public AidaControl endpoints;
 - `/contracts/asyncapi` for LiveKit Data topics and payloads;
 - `/contracts/schemas` for Profile, event, command, state, permission, and error definitions;
 - `/contracts/examples` for normal, failure, retry, and takeover payloads;
 - `/generated-clients` or CI release artifacts for Kotlin, Python, and TypeScript consumers;
-- `/postgres/migrations` for hot-path transactional tables;
-- `/postgres/seeds` and versioned test datasets.
+- `/mysql/migrations` for hot-path transactional tables;
+- `/mysql/seeds` and versioned test datasets.
 
 The OpenAPI definition includes the externally callable LiveKit webhook endpoint even though its authentication scheme is LiveKit signature verification rather than an Aida user token.
 
-This is not a separate Contracts or Data service. AidaControl implements the runtime interfaces and exclusively owns Postgres. For the POC, AidaAdmin's server owns configuration writes and accesses NocoDB directly with a server-only credential; AidaControl reads that configuration for call bootstrap. Browser code and every other repository access neither NocoDB nor Postgres directly.
+This is not a separate Contracts or Data service. AidaControl implements the runtime interfaces and exclusively owns MySQL 8. For the POC, AidaAdmin's server owns configuration writes and accesses NocoDB directly with a server-only credential; AidaControl reads that configuration for call bootstrap. Browser code and every other repository access neither NocoDB nor MySQL 8 directly.
 
-Postgres is exclusive to AidaControl and stores the live transactional path: `call_session`, `call_event`, and `control_command`. AidaControl uses database transactions, row-level locking, unique idempotency constraints, optimistic state versions, and per-call ordered event allocation to implement first-command-wins semantics safely.
+MySQL 8 is exclusive to AidaControl and stores the live transactional path: `call_session`, `call_event`, and `control_command`. AidaControl uses database transactions, row-level locking, unique idempotency constraints, optimistic state versions, and per-call ordered event allocation to implement first-command-wins semantics safely.
 
 NocoDB stores slow-moving, human-edited configuration: tenants, UID-to-tenant role mappings, extensions, ring groups/members, profiles, inbound routes, devices/bindings, singleton appearance settings, CRM import records, per-field configuration-source metadata, and related audit/configuration metadata. AidaAdmin's server writes it and AidaControl reads it using separate environment-supplied API credentials. The existing NocoDB instance is MySQL-backed, but clients use only the NocoDB API and avoid backend-specific SQL behavior.
 
-AidaControl unit tests cover all legal/illegal state transitions, route resolution, profile pinning, tenant isolation, permissions, concurrent takeover races, duplicate idempotency keys, ordered sequence allocation, schema/example validation, generated-client compilation, and contract compatibility. Integration tests run against actual Postgres and NocoDB instances populated with versioned test records. POC acceptance uses the real configured OfficePulse, LiveKit Cloud, Pusher, identity, NocoDB, and handset integrations; an isolated substitute never satisfies an integration or acceptance gate.
+AidaControl unit tests cover all legal/illegal state transitions, route resolution, profile pinning, tenant isolation, permissions, concurrent takeover races, duplicate idempotency keys, ordered sequence allocation, schema/example validation, generated-client compilation, and contract compatibility. Integration tests run against actual MySQL 8 and NocoDB instances populated with versioned test records. POC acceptance uses the real configured OfficePulse, LiveKit Cloud, Pusher, identity, NocoDB, and handset integrations; an isolated substitute never satisfies an integration or acceptance gate.
 
 ### 5.2 `AidaAgent`
 
@@ -211,10 +211,10 @@ Documentation-and-automation repository rather than an application service. It i
 It contains:
 
 - dependency/version matrix and supported deployment topology;
-- complete environment-variable, CIDR, and secret inventory, including Postgres, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB, `ID_TRUSTED_APP_CIDRS`, `ID_EVENT_SOURCE_CIDRS`, `AIDACONTROL_TRUSTED_SERVER_CIDRS`, trusted-proxy CIDRs, Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
+- complete environment-variable, CIDR, and secret inventory, including MySQL 8, LiveKit API key/secret, predefined LiveKit agent ID, Pusher, NocoDB, `ID_TRUSTED_APP_CIDRS`, `ID_EVENT_SOURCE_CIDRS`, `AIDACONTROL_TRUSTED_SERVER_CIDRS`, trusted-proxy CIDRs, Firebase if used, CRM when enabled (`CRM_IMPORT_ENABLED` is pinned `false` for the POC in every deployment configuration, not left to a code default), and OfficePulse service credentials;
 - public wildcard and private OfficePulse DNS, TLS, firewall, mTLS, and ingress instructions;
 - Docker Compose orchestration referencing released project images;
-- scripts that run AidaControl's Postgres migrations and invoke AidaAdmin's NocoDB schema commands to create, validate, and seed the configuration base;
+- scripts that run AidaControl's MySQL 8 migrations and invoke AidaAdmin's NocoDB schema commands to create, validate, and seed the configuration base;
 - `id` client registration and configuration instructions for AidaAdmin;
 - OfficePulse integration installation order and verification;
 - health-check, smoke-test, backup, restore, upgrade, and rollback runbooks;
@@ -230,11 +230,11 @@ There is no AidaSystemTest repository in the initial design. Every source reposi
 ### 6.1 Tenants and external references
 
 - `tenant`: UUID, status, display name, timestamps.
-- `tenant_user`: tenant (nullable only for platform Super Admin), shared `id_db.id_tbl_User.iUserId`, Aida role, enabled state, timestamps; unique by tenant/user.
+- `tenant_user`: tenant (nullable only for platform Super Admin), shared `platform_db.identity_tbl_User.iUserId`, Aida role, enabled state, timestamps; unique by tenant/user.
 - `tenant_external_reference`: tenant, system (`localsplash_crm`), external ID, metadata; unique by system/external ID.
 - `platform_appearance`: singleton POC settings for brand name, agent display name, colors, uploaded logo/icon references, and support/legal URLs.
 
-`id_db.id_tbl_User.iUserId` is the shared person identifier. Aida does not duplicate name, email, password, or provider identity. Aida's `tenant_user` is only the UID-to-tenant authorization mapping. There is deliberately no separate `uisp` system value: UISP sign-in flows through `id`, and `iUserId` supersedes a direct UISP linkage.
+`platform_db.identity_tbl_User.iUserId` is the shared person identifier. Aida does not duplicate name, email, password, or provider identity. Aida's `tenant_user` is only the UID-to-tenant authorization mapping. There is deliberately no separate `uisp` system value: UISP sign-in flows through `id`, and `iUserId` supersedes a direct UISP linkage.
 
 ### 6.2 Profiles and inherited configuration
 
@@ -263,7 +263,7 @@ The POC locale is fixed to English (`en-US`). Profile configuration includes Eng
 - `configuration_source`: tenant, target type/ID, field path, source system, external record ID/version, imported normalized value JSON, source-updated time, import time, API overwrite policy, and latest import result; unique on the applicable target/field/source tuple.
 - `audit_event`: tenant, actor, action, target, correlation, before/after references, timestamp.
 
-### 6.4 Postgres transactional records
+### 6.4 MySQL 8 transactional records
 
 - `call_session`: call ID, tenant/route/profile-version references, Asterisk references, LiveKit room name, stable agent participant identity, current agent participant SID, caller/called numbers, state, `state_version`, next event sequence, timestamps, terminal reason.
 - `call_event`: call ID, per-call sequence allocated transactionally, globally unique event ID, type, actor, payload, timestamp; unique on `(call_session_id, sequence)`.
@@ -345,7 +345,7 @@ Suggestions contain an ID, label, typed action, constrained parameters, expiry, 
 
 ## 9. Realtime delivery and Pusher
 
-The LiveKit Data contract is defined in `new_AidaControl/contracts/asyncapi` and is normative for AidaControl, AidaAgent, and AidaHandset. Payloads use UTF-8 JSON. A durable AidaControl event has this envelope:
+The LiveKit Data contract is defined in `AidaControl/contracts/asyncapi` and is normative for AidaControl, AidaAgent, and AidaHandset. Payloads use UTF-8 JSON. A durable AidaControl event has this envelope:
 
 ```json
 {
@@ -402,7 +402,7 @@ AidaControl uses the Node `livekit-server-sdk` `WebhookReceiver` with a dedicate
 
 The required POC webhook events are `participant_joined`, `participant_left`, `participant_connection_aborted`, `room_started`, and `room_finished`. AidaControl validates that the room maps to an active Call Session and that an agent participant has the stable identity expected for `aida-prime`. For an agent `participant_joined`, it transactionally updates the current participant SID. Departure/abort clears that SID only if it still matches the departing SID, preventing a delayed webhook from clearing a newer reconnect.
 
-LiveKit webhook `id` is the deduplication key. AidaControl records processed webhook IDs or their resulting external event IDs under a unique Postgres constraint. A retry returns success without repeating side effects. The handler acknowledges accepted deliveries promptly and processes state changes transactionally. Because LiveKit webhooks are retried but not guaranteed indefinitely, `RoomServiceClient.listParticipants()` remains the reconciliation fallback before a targeted `sendData()` command.
+LiveKit webhook `id` is the deduplication key. AidaControl records processed webhook IDs or their resulting external event IDs under a unique MySQL 8 constraint. A retry returns success without repeating side effects. The handler acknowledges accepted deliveries promptly and processes state changes transactionally. Because LiveKit webhooks are retried but not guaranteed indefinitely, `RoomServiceClient.listParticipants()` remains the reconciliation fallback before a targeted `sendData()` command.
 
 Configuration variables are:
 
@@ -412,19 +412,19 @@ Configuration variables are:
 
 These webhook credentials may be distinct from AidaControl's `sendData()` workload key and should be separate when LiveKit key management permits. Rotation supports an overlap window in which the current and next signing keys can both verify deliveries.
 
-In LiveKit Cloud, the operator opens **Settings → Webhooks**, creates a webhook named `AidaControl`, enters the callback URL above, selects the signing API key, saves it, and sends a test event. `AidaInfrastructureSetupInstructions` verifies public TLS reachability, raw-body handling, signature validation, test-event receipt, duplicate delivery behavior, and Postgres persistence. See the [LiveKit webhook configuration and verification documentation](https://docs.livekit.io/intro/basics/rooms-participants-tracks/webhooks-events/) and [JavaScript `WebhookReceiver`](https://docs.livekit.io/reference/server-sdk-js/classes/WebhookReceiver.html).
+In LiveKit Cloud, the operator opens **Settings → Webhooks**, creates a webhook named `AidaControl`, enters the callback URL above, selects the signing API key, saves it, and sends a test event. `AidaInfrastructureSetupInstructions` verifies public TLS reachability, raw-body handling, signature validation, test-event receipt, duplicate delivery behavior, and MySQL 8 persistence. See the [LiveKit webhook configuration and verification documentation](https://docs.livekit.io/intro/basics/rooms-participants-tracks/webhooks-events/) and [JavaScript `WebhookReceiver`](https://docs.livekit.io/reference/server-sdk-js/classes/WebhookReceiver.html).
 
 ### 9.4 Agent participant SID lifecycle
 
-The LiveKit participant SID is not available merely because a token was created or an agent was dispatched. After joining, AidaAgent publishes `aida.event.agent_ready` for room participants. Independently, AidaControl receives and verifies LiveKit's participant-joined webhook (or queries `RoomServiceClient.listParticipants()` by stable agent identity) and stores the identity/current SID on the Postgres Call Session. AidaControl does not need to join the room or consume its data channel to learn the SID.
+The LiveKit participant SID is not available merely because a token was created or an agent was dispatched. After joining, AidaAgent publishes `aida.event.agent_ready` for room participants. Independently, AidaControl receives and verifies LiveKit's participant-joined webhook (or queries `RoomServiceClient.listParticipants()` by stable agent identity) and stores the identity/current SID on the MySQL 8 Call Session. AidaControl does not need to join the room or consume its data channel to learn the SID.
 
 Agent-only delivery resolves `destinationSids` from that stored current SID. If no ready SID exists, delivery waits/retries within the command deadline. If the agent reconnects, its SID may change; the new ready/webhook event replaces the stored SID transactionally. Before retrying a failed targeted command, AidaControl may resolve the stable identity through LiveKit room participant lookup and update the SID. Stale SIDs are never assumed valid for the life of the call.
 
 ### 9.5 Ordering, deduplication, and replay
 
-AidaControl-published call and command events use the durable Postgres per-call `sequence`. The handset ignores duplicate `eventId` values, detects Control Plane sequence gaps, and replays those durable events with `GET /v1/calls/{id}/events?afterSequence=41`.
+AidaControl-published call and command events use the durable MySQL 8 per-call `sequence`. The handset ignores duplicate `eventId` values, detects Control Plane sequence gaps, and replays those durable events with `GET /v1/calls/{id}/events?afterSequence=41`.
 
-AidaAgent transcript events do not share the Postgres sequence because they are published directly and are not stored historically. They carry `producer="aida-agent"`, stable agent identity, participant SID, and a monotonically increasing `streamSequence` for the current agent connection. A reconnect starts a new participant SID/stream epoch. The handset tracks transcript order by `(participantSid, streamSequence)`, ignores duplicates, and marks unrecoverable live transcript gaps rather than requesting historical transcript data that does not exist.
+AidaAgent transcript events do not share the MySQL 8 sequence because they are published directly and are not stored historically. They carry `producer="aida-agent"`, stable agent identity, participant SID, and a monotonically increasing `streamSequence` for the current agent connection. A reconnect starts a new participant SID/stream epoch. The handset tracks transcript order by `(participantSid, streamSequence)`, ignores duplicates, and marks unrecoverable live transcript gaps rather than requesting historical transcript data that does not exist.
 
 Pusher is the POC notification layer, not the transcript stream. A device subscribes to a private device channel authorized by AidaControl. A call-arrival payload contains only `eventId`, `callSessionId`, event type, and timestamp—never a DID, transcript, prompt, SIP secret, or LiveKit token.
 
@@ -528,7 +528,7 @@ Staff administration uses a separately initiated short-lived privileged session,
 
 ## 13. Identity integration (`id`)
 
-Identity for the Aida Voice Platform is the in-scope LocalSplash identity service, **`id`**, at `id.localsplash.ai` on the apex `localsplash.ai` domain. `id` owns shared people in `id_db.id_tbl_User`, provider identities, sign-in (Google, Microsoft, UISP), sessions, and revocation. Aida owns tenants and stores only `iUserId`-to-tenant role mappings; no Aida component keeps a second person, password, name, email, or provider-identity record.
+Identity for the Aida Voice Platform is the in-scope LocalSplash identity service, **`id`**, at `id.localsplash.ai` on the apex `localsplash.ai` domain. `id` owns shared people in `platform_db.identity_tbl_User`, provider identities, sign-in (Google, Microsoft, UISP), sessions, and revocation. Aida owns tenants and stores only `iUserId`-to-tenant role mappings; no Aida component keeps a second person, password, name, email, or provider-identity record.
 
 ### 13.1 AidaAdmin ↔ `id`
 
@@ -643,7 +643,7 @@ Organization-specific white-labeling is deferred until after consultation. The d
 ## 19. Final GitHub project list and build order
 
 1. `localsplash/id` — existing identity application; complete the Aida integration requirements without rebuilding it
-2. `localsplash/new_AidaControl` — greenfield runtime control plane, contracts, and Postgres migrations
+2. `localsplash/AidaControl` — greenfield runtime control plane, contracts, and MySQL 8 migrations
 3. `localsplash/new_AidaAdmin` — greenfield administration and staff operations application, including NocoDB schema automation
 4. `localsplash/OfficePulseAidaIntegration` — greenfield FastAGI/ARI/provisioning service and Asterisk deployment assets
 5. `localsplash/AidaAgent` — greenfield LiveKit Cloud worker validated against the configured LiveKit agent and AI providers
