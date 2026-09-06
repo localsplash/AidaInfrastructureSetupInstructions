@@ -189,13 +189,18 @@ with no row is a tenant Aida does not serve.
 | `callerIdName` | String | Nullable; tenant default when absent |
 | `callerIdNumber` | E.164 String | Nullable; tenant default when absent |
 | `asteriskContext` | String | Required |
+| `deviceMacAddress` | String | Nullable; unique when present |
+| `deviceModel` | String | Nullable |
 | `provisioningProfile` | String | Nullable |
+| `dtDeviceEnrolled` | Timestamp | Nullable |
 | `bEnabled` | BOOLEAN | Default `true` |
 | `dtCreated` | Timestamp | Required |
 | `dtUpdated` | Timestamp | Required |
 
 Unique: `(iTenantId, extensionNumber)`. One user may hold several extensions;
-one extension has zero or one user. SIP secrets never enter NocoDB.
+one extension has zero or one user. Enrollment configuration, including the
+provisioned handset MAC and profile, lives here. Live device session state lives
+in `aida_tbl_DeviceSession` in `aida_db`. SIP secrets never enter NocoDB.
 
 #### `aida_tbl_RingGroup`
 
@@ -334,6 +339,65 @@ Unique: `(uidCallSession, iSequenceNumber)`.
 
 Unique: `(uidCallSession, idempotencyKey)`. Pending commands are claimed with
 `SELECT ... FOR UPDATE SKIP LOCKED`.
+
+#### `aida_tbl_RouteToken`
+
+One-time inbound SIP route token used to hand an OfficePulse-routed inbound call
+to AidaControl without storing the raw token.
+
+| Column | Type | Requirement |
+| --- | --- | --- |
+| `uidRouteToken` | CHAR(36) | Primary key |
+| `tokenHash` | CHAR(64) | Required, unique; SHA-256 of the token |
+| `uidCallSession` | CHAR(36) | Required |
+| `dtCreated` | DATETIME(3) | Required |
+| `dtExpires` | DATETIME(3) | Required |
+| `dtConsumed` | DATETIME(3) | Nullable |
+| `consumedByChannel` | VARCHAR(128) | Nullable |
+
+Consumption is a single conditional update:
+`UPDATE ... SET dtConsumed = ? WHERE tokenHash = ? AND dtConsumed IS NULL AND dtExpires > ?`.
+Single use is proven by affected-row count, never by read-then-write.
+
+#### `aida_tbl_DeviceSession`
+
+Live handset refresh-token and revocation state. Enrollment configuration remains
+in `PlatformConfig.aida_tbl_Extension`.
+
+| Column | Type | Requirement |
+| --- | --- | --- |
+| `uidDeviceSession` | CHAR(36) | Primary key |
+| `uidExtension` | CHAR(36) | Required; bound extension in `PlatformConfig` |
+| `iUserId` | BIGINT | Nullable; `platform_db.identity_tbl_User.iUserId` |
+| `deviceIdentifier` | VARCHAR(64) | Required; enrolled MAC or enrollment id |
+| `refreshTokenHash` | CHAR(64) | Required, unique |
+| `dtIssued` | DATETIME(3) | Required |
+| `dtLastSeen` | DATETIME(3) | Nullable |
+| `dtRevoked` | DATETIME(3) | Nullable |
+| `bEnabled` | BOOLEAN | Default `true` |
+
+Unique: `(uidExtension, deviceIdentifier)`.
+
+#### `aida_tbl_WebhookDelivery`
+
+Inbound webhook and event receipt ledger for LiveKit webhooks and identity events.
+
+| Column | Type | Requirement |
+| --- | --- | --- |
+| `uidWebhookDelivery` | CHAR(36) | Primary key |
+| `source` | VARCHAR(32) | Required; `livekit` or `identity` |
+| `externalEventId` | VARCHAR(128) | Required; sender event id |
+| `eventType` | VARCHAR(64) | Required |
+| `jPayload` | JSON | Required |
+| `status` | VARCHAR(32) | Required |
+| `iAttemptCount` | INTEGER | Required |
+| `dtReceived` | DATETIME(3) | Required |
+| `dtProcessed` | DATETIME(3) | Nullable |
+| `lastError` | VARCHAR(512) | Nullable |
+
+Unique: `(source, externalEventId)`. That constraint is the idempotency
+mechanism, so duplicate delivery is a rejected insert rather than a re-processed
+event.
 
 #### `aida_tbl_SchemaMigration`
 
