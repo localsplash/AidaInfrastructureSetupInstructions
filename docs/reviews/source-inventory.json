@@ -1,0 +1,107 @@
+{
+  "review_date": "2026-09-06",
+  "host": "dockerappvm01-dev",
+  "aida_repositories": [
+    {
+      "repository": "localsplash/AidaInfrastructureSetupInstructions",
+      "path": "/opt/aida/AidaInfrastructureSetupInstructions",
+      "head": "e3dab5cbb37e3998fb5d167ccc6851cb4d481ed4",
+      "branch": "plan/unified-office-platform",
+      "empty": false
+    },
+    {
+      "repository": "localsplash/AidaControl",
+      "path": "/opt/aida/AidaControl",
+      "head": null,
+      "branch": "main",
+      "empty": true
+    },
+    {
+      "repository": "localsplash/AidaAdmin",
+      "path": "/opt/aida/AidaAdmin",
+      "head": "98d63ba6e2bfe8f322995180199a9521ecbb8fb4",
+      "branch": "main",
+      "empty": false
+    },
+    {
+      "repository": "localsplash/OfficePulseAidaIntegration",
+      "path": "/opt/aida/OfficePulseAidaIntegration",
+      "head": "291e2d927590da84d52bb2127186bda4e37e3598",
+      "branch": "main",
+      "empty": false
+    },
+    {
+      "repository": "localsplash/AidaAgent",
+      "path": "/opt/aida/AidaAgent",
+      "head": "235375de0eb29c48f44fb935cc002ff3839f58c8",
+      "branch": "main",
+      "empty": false
+    },
+    {
+      "repository": "localsplash/AidaHandset",
+      "path": "/opt/aida/AidaHandset",
+      "head": "a04e6db44da07bb797d1a3a63d25f9d5747ac435",
+      "branch": "main",
+      "empty": false
+    }
+  ],
+  "existing_host_repositories": [
+    {
+      "path": "/opt/identity",
+      "head": "0ed3e7f0dd68939030f70d18bdac9b9bde019d23 2026-09-02 Merge branch 'claude/identity-zero-config-setup-uu8a7o'",
+      "branch": "main",
+      "modified_paths": [
+        "M .env.example",
+        " M Dockerfile",
+        " M README.md",
+        " M docker-compose.yml",
+        " M public/admin.html",
+        " M public/setup.html",
+        " M src/app.test.ts",
+        " M src/app.ts",
+        " M src/config.ts",
+        " M src/net.test.ts",
+        " M src/net.ts",
+        " M src/providers.ts",
+        " M src/server.ts",
+        " M src/settings.ts",
+        " M src/web.ts",
+        " M src/webhooks.ts",
+        "?? .env.bak",
+        "?? scripts/",
+        "?? src/localConfig.test.ts",
+        "?? src/localConfig.ts"
+      ]
+    },
+    {
+      "path": "/opt/echo/EchoOrchestrator",
+      "head": "75ba414474a07bab2a0c13cf881f176b614b7b6a 2026-09-05 feat: give echo-service a volume for the logs behind /logs",
+      "branch": "feat/echo-service-log-volume",
+      "modified_paths": []
+    },
+    {
+      "path": "/opt/echo/EchoDatabase",
+      "head": "552b23667c19236df75c5ff88ae9183f5d3ce966 2026-09-05 Merge pull request #7 from localsplash/fix/missing-message-procs",
+      "branch": "main",
+      "modified_paths": []
+    },
+    {
+      "path": "/opt/echo/EchoWeb",
+      "head": "3855a60543c434a74fc9de398a7ca6b4de99a75e 2026-09-05 Merge pull request #19 from localsplash/claude/resolve-issues-6z1svy",
+      "branch": "main",
+      "modified_paths": []
+    },
+    {
+      "path": "/opt/echo/EchoService",
+      "head": "8d292e7cb3e0c8c800ef32e7204ef68190cd2c19 2026-09-05 Merge pull request #9 from localsplash/feat/observability-and-network-policy",
+      "branch": "main",
+      "modified_paths": []
+    },
+    {
+      "path": "/opt/echo/EchoMedia",
+      "head": "20c358cddbd2d73c06c07b1d5211b4fc39c7f566 2026-04-27 Fix 404 on media filenames with spaces or percent-encoded characters",
+      "branch": "main",
+      "modified_paths": []
+    }
+  ]
+}
