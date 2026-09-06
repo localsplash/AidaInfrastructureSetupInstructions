@@ -86,7 +86,7 @@ Each repository must contain a README, architecture notes, `.env.example` withou
 
 The implementation stack is fixed for the POC: TypeScript/Node.js for `id`, AidaControl, and OfficePulseAidaIntegration, React/TypeScript for AidaAdmin, Python for AidaAgent, Kotlin for AidaHandset, Docker Compose for initial deployment, and GitHub Actions for CI. Interface contracts use OpenAPI 3.1, AsyncAPI, and JSON Schema.
 
-`localsplash/id` is the only application repository with pre-existing implementation code. `localsplash/AidaControl`, `localsplash/new_AidaAdmin`, `localsplash/OfficePulseAidaIntegration`, `localsplash/AidaAgent`, and `localsplash/AidaHandset` are greenfield builds. The deprecated `delme_AidaControl` and `delme_AidaAdmin` repositories are neither dependencies nor reference implementations. `localsplash/AidaInfrastructureSetupInstructions` is the canonical documentation and deployment-automation repository. The dependency-ordered implementation backlog is defined in [POC_REPOSITORY_BUILD_SEQUENCE.md](POC_REPOSITORY_BUILD_SEQUENCE.md).
+`localsplash/id` is the only application repository with pre-existing implementation code. `localsplash/AidaAdmin`, `localsplash/AidaControl`, `localsplash/OfficePulseAidaIntegration`, `localsplash/AidaAgent`, and `localsplash/AidaHandset` are greenfield builds. The deprecated `delme_AidaControl` and `delme_AidaAdmin` repositories are neither dependencies nor reference implementations. `localsplash/AidaInfrastructureSetupInstructions` is the canonical documentation and deployment-automation repository. The dependency-ordered implementation backlog is defined in [POC_REPOSITORY_BUILD_SEQUENCE.md](POC_REPOSITORY_BUILD_SEQUENCE.md).
 
 ### 5.0 `id`
 
@@ -177,7 +177,7 @@ Unit tests cover ARI event handling, reconnect, duplicates, bridge membership, b
 
 The repository contains the companion ARI/Stasis service, a versioned `aida.conf` or `aida-managed.conf` dialplan include, required `extensions.conf` include instructions, ARI account configuration template, local audio assets, codec conversion/deployment scripts, system-service/container definition, firewall guidance, and validation/rollback scripts. Existing OfficePulse configuration is changed only through explicit includes and documented settings.
 
-### 5.4 `AidaAdmin` (repository: `localsplash/new_AidaAdmin`)
+### 5.4 `AidaAdmin` (repository: `localsplash/AidaAdmin`)
 
 Responsive tenant/staff application at `app.aida.localsplash.ai`.
 
@@ -643,13 +643,13 @@ Organization-specific white-labeling is deferred until after consultation. The d
 ## 19. Final GitHub project list and build order
 
 1. `localsplash/id` — existing identity application; complete the Aida integration requirements without rebuilding it
-2. `localsplash/AidaControl` — greenfield runtime control plane, contracts, and MySQL 8 migrations
-3. `localsplash/new_AidaAdmin` — greenfield administration and staff operations application, including NocoDB schema automation
+2. `localsplash/AidaAdmin` — greenfield administration and staff operations application, including NocoDB schema automation
+3. `localsplash/AidaControl` — greenfield runtime control plane, contracts, and MySQL 8 migrations
 4. `localsplash/OfficePulseAidaIntegration` — greenfield FastAGI/ARI/provisioning service and Asterisk deployment assets
 5. `localsplash/AidaAgent` — greenfield LiveKit Cloud worker validated against the configured LiveKit agent and AI providers
 6. `localsplash/AidaHandset` — greenfield Android 11 application
 7. `localsplash/AidaInfrastructureSetupInstructions` — canonical documentation, setup automation, and deployment smoke tests
 
-AidaControl contracts and deterministic unit tests are delivered before dependent integrations so the projects can be built independently against stable interfaces. Cross-repository integration and acceptance use the real configured POC services and records. OfficePulse is customized by installing the integration repository's service, include files, prompts, and configuration; Asterisk itself is never forked.
+AidaAdmin's NocoDB schema automation is delivered before AidaControl finalizes its configuration reads, and AidaControl contracts and deterministic unit tests are delivered before dependent integrations so the projects can be built independently against stable interfaces. Cross-repository integration and acceptance use the real configured POC services and records. OfficePulse is customized by installing the integration repository's service, include files, prompts, and configuration; Asterisk itself is never forked.
 
 The five application repositories identified as greenfield plus the documentation/automation repository are the complete set of new builds for the POC. `id` is the sole existing application codebase and AidaAdmin integrates with it per §13. No Echo repository receives Aida-specific changes. EchoService remains an existing messaging integration and requires changes only if a later, repository-specific implementation plan explicitly identifies one.

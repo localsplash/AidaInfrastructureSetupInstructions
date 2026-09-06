@@ -4,8 +4,8 @@
 
 `localsplash/id` is the only application repository with pre-existing code. The following application repositories are greenfield builds:
 
+- `localsplash/AidaAdmin`
 - `localsplash/AidaControl`
-- `localsplash/new_AidaAdmin`
 - `localsplash/OfficePulseAidaIntegration`
 - `localsplash/AidaAgent`
 - `localsplash/AidaHandset`
@@ -18,8 +18,8 @@ Every numbered GitHub issue is a bounded autonomous build task. An agent must co
 
 | Repository | Ordered implementation issues |
 | --- | --- |
+| `AidaAdmin` | #10 bootstrap; #8 identity; #11 NocoDB schema; #12 tenants/users/extensions/ring groups/provisioning; #13 profiles/routes/appearance; #9 AidaControl runtime proxy; #14 live operations UI |
 | `AidaControl` | #11 bootstrap; #12 contracts/MySQL 8; #13 NocoDB reads/DID resolution; #14 call bootstrap/LiveKit; #8 SIP route token; #9 handset enrollment/call API/Pusher; #15 commands/takeover/recovery; #10 trust boundary |
-| `new_AidaAdmin` | #10 bootstrap; #8 identity; #11 NocoDB schema; #12 tenants/users/extensions/ring groups/provisioning; #13 profiles/routes/appearance; #9 AidaControl runtime proxy; #14 live operations UI |
 | `OfficePulseAidaIntegration` | #1 bootstrap; #2 Asterisk Realtime provisioning; #3 FastAGI/LiveKit SIP routing; #4 ARI takeover; #5 disclosure/fallback/recording/hold; #6 MAC provisioning; #7 hardening/deployment |
 | `AidaAgent` | #1 bootstrap; #2 dispatch metadata/route token/prompt; #3 voice session/transcript lifecycle; #4 barge-in/failed-transfer/graceful handoff; #5 guidance/tools; #6 deployment/reconnect/observability |
 | `AidaHandset` | #1 bootstrap; #2 MAC enrollment; #3 Pusher/recovery; #4 LiveKit transcript UI; #5 Take over; #6 simultaneous calls/lifecycle; #7 GXV3450 release hardening |
@@ -30,10 +30,10 @@ The issue body in GitHub is authoritative for deliverables, acceptance criteria,
 ## 3. Cross-repository dependency gates
 
 1. Start each repository's bootstrap issue and Infrastructure issue #1 in parallel.
-2. Complete AidaControl #12 before Agent, Handset, OfficePulse, or Admin implement an AidaControl contract consumer.
-3. Complete AidaAdmin #11 before AidaControl #13 is finalized; both must use the same versioned NocoDB schema and generated identifiers.
+2. Complete AidaAdmin #11 before AidaControl #13 is finalized; AidaAdmin is the sole writer for the versioned NocoDB schema and generated identifiers that AidaControl reads.
+3. Complete AidaControl #12 before Agent, Handset, OfficePulse, or Admin implement an AidaControl contract consumer.
 4. Complete AidaControl #14 and #8 before integrating AidaAgent #2 or OfficePulse #3.
-5. Complete AidaControl #9 and #15 before finalizing Handset #2–#5 or OfficePulse #4.
+5. Complete AidaControl #9 and #15 before finalizing Handset #2-#5 or OfficePulse #4.
 6. Complete application hardening, then execute Infrastructure #7 against pinned release artifacts.
 
 ## 4. POC completion gate
