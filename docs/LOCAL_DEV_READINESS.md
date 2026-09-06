@@ -12,7 +12,7 @@ The first implementation wave is built, tested and proposed in PRs. AidaAgent an
 | [AidaAdmin #32](https://github.com/localsplash/AidaAdmin/pull/32) | `/opt/aida/AidaAdmin`, `bacb7b7` | PostgreSQL removed; central sessions/directory; MySQL state/receipts/audit; voice profiles and runtime enrollment |
 | [OfficePulse #11](https://github.com/localsplash/OfficePulseAidaIntegration/pull/11) | `/opt/aida/OfficePulseAidaIntegration`, `101a694` | Canonical tenants, scoped device APIs, public/private listeners, transactional commands/lifecycle/webhooks, per-DID offline fallback |
 | [AidaAgent #8](https://github.com/localsplash/AidaAgent/pull/8) | `/opt/aida/AidaAgent`, `438e32d` | Python LiveKit worker, reliable live transcripts, bounded agent handoff |
-| [AidaHandset #9](https://github.com/localsplash/AidaHandset/pull/9) | `/opt/aida/AidaHandset`, `a758866` | Android enrollment, encrypted credentials, assigned-call list, data-only transcript viewer, versioned takeover |
+| [AidaHandset #9](https://github.com/localsplash/AidaHandset/pull/9) | `/opt/aida/AidaHandset`, `4dffced` | Android enrollment, encrypted credentials, assigned-call list, data-only transcript viewer, versioned takeover |
 | [EchoDatabase #9](https://github.com/localsplash/EchoDatabase/pull/9) | `/opt/platform-work/EchoDatabase`, `ff4939c` | Additive historical organization/number/user mappings and dry-run importer |
 | [EchoWeb #22](https://github.com/localsplash/EchoWeb/pull/22) | `/opt/platform-work/EchoWeb`, `b2ab311` | Central sessions, current memberships, business-number picker, scoped messaging proxy and SUPER_ADMIN carrier controls |
 | [Platform architecture / deployment #17](https://github.com/localsplash/AidaInfrastructureSetupInstructions/pull/17) | `/opt/aida/AidaInfrastructureSetupInstructions`, `plan/unified-office-platform` | Master design, issue reconciliation, data standard and isolated development Compose |
@@ -33,9 +33,9 @@ AidaControl remains deferred; OfficePulse owns voice orchestration. No replaceme
 | EchoWeb / EchoDatabase | 15 unit/HTTP tests plus four real MySQL migration/importer tests; production image |
 | Development Compose | Synthetic `docker compose config --quiet`, port/trust/credential assertions, build-context checks and MySQL init-script validation |
 
-All MySQL tests used disposable schemas/containers. Provider-facing Agent tests ran offline without paid calls. Local reports live under `/opt/platform-review`. GitHub CI was verified successful for Identity, AidaAdmin and AidaAgent at this point; other PR checks should be read from their latest heads before merge.
+All MySQL tests used disposable schemas/containers. Provider-facing Agent tests ran offline without paid calls. Local reports live under `/opt/platform-review`. GitHub CI was verified successful for Identity, AidaAdmin, OfficePulse and AidaAgent, plus the initial Android implementation at this point; other PR checks should be read from their latest heads before merge.
 
-The installable handset debug artifact is `/opt/platform-review/aida-handset-debug.apk` (SHA-256 `63ef14f01cbe5b8d6e986e0859d2fd89470290e2b32e08f91893eec924e01abc`). It is not a signed production release and has not been exercised on the actual office handset.
+The installable handset debug artifact is `/opt/platform-review/aida-handset-debug.apk` (SHA-256 `9107c8b6d184141c96c95cb6c02028aed99cdf55e37b40756cc2445d00019877`). It is not a signed production release and has not been exercised on the actual office handset.
 
 ## Planned NPM mappings
 
