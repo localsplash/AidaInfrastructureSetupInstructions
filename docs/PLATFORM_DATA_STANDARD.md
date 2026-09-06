@@ -1,6 +1,6 @@
 # Platform Data Standard
 
-Status: proposed implementation baseline for the Echo/Aida office platform, 2026-09-06. Read with [the master plan](PLATFORM_MASTER_PLAN.md). This supersedes conflicting storage/ownership recommendations in the older Aida documents for the POC. It does not mandate changes to unrelated LocalSplash applications or upstream vendor products on the same host.
+Status: agreed design and first implementation wave for the Echo/Aida office platform, 2026-09-06. See [actual PR/build status](LOCAL_DEV_READINESS.md); unimplemented target requirements below remain acceptance work. Read with [the master plan](PLATFORM_MASTER_PLAN.md). This supersedes conflicting storage/ownership recommendations in the older Aida documents for the POC. It does not mandate changes to unrelated LocalSplash applications or upstream vendor products on the same host.
 
 ## 1. Ownership and stores
 
@@ -34,7 +34,7 @@ This is not an absolute ban on every other environment variable. The deployment 
 
 Keep deployment topology in the versioned release manifest/Compose. Initialize infrastructure credentials outside the application store, start NocoDB, create `PlatformConfig`, populate application settings and only then start dependent applications. Persist generated store credentials once; never generate a new password merely because an existing volume is being reused. Runtime application passwords can be stored in `cfg_tbl_Setting`, while infrastructure retains the credentials needed to initialize/restore itself.
 
-The Android app and browsers never receive NocoDB tokens, DB passwords, LiveKit API secrets or provider credentials. AidaAgent obtains call context through the runtime's authenticated call-scoped contract. Worker process/provider secrets may be rendered from the operator-owned settings into the worker's private startup environment, with explicit restart semantics. OfficePulse reads the settings/configuration it needs as the merged POC runtime; a future separate PBX adapter would receive a restricted configuration projection.
+The Android app and browsers never receive NocoDB tokens, DB passwords, LiveKit API secrets or provider credentials. AidaAgent obtains allowlisted call context through the runtime's server-authenticated LiveKit dispatch metadata, bound to the call/room. It does not query platform stores. Worker process/provider secrets may be rendered from the operator-owned settings into the worker's private startup environment, with explicit restart semantics. OfficePulse reads the settings/configuration it needs as the merged POC runtime; a future separate PBX adapter would receive a restricted configuration projection.
 
 ### 2.2 Table shape and resolution
 
@@ -59,7 +59,7 @@ Legacy Identity settings currently use API fields `Key`, `Value`, `Description` 
 
 ### 2.3 Discovery, refresh and failure
 
-Resolve the base by the unique configured convention `PlatformConfig`, then resolve the expected table. Cache values and resolved IDs for 30 seconds. Duplicate matching bases/tables/keys are errors. Invalidate after writes and failed reads; a failed refresh does not advance the cache timestamp or silently preserve an apparently healthy cache.
+Resolve the base by the unique configured convention `PlatformConfig`, then resolve the expected table. Identity settings and metadata use a 30-second refresh. The first Admin/OfficePulse implementation loads connection/provider settings at startup; those changes require restart. Desired voice configuration is read per operation, with runtime metadata IDs refreshed after 30 seconds. A future hot-settings feature must declare which clients/pools it can replace safely. Duplicate matching bases/tables/keys are errors. Invalidate after writes and failed reads; a failed refresh does not advance the cache timestamp or silently preserve an apparently healthy cache.
 
 Initialize missing objects only in an explicit bootstrap/migration phase. Ordinary runtime reads must not silently create a new empty base because the configured base was renamed or lost.
 
@@ -75,7 +75,7 @@ The proposed `UNIQUE(iTenantId, iUserId)` on a nullable tenant column does not p
 
 Identity owns tenant create/update/disable and membership APIs. AidaAdmin validates the current actor's tenant administration permission before invoking server-only directory writes. CIDR trust admits a server; it does not prove which office user is acting. A claimed tenant ID or role in a browser request is not authority. SUPER ADMIN can inspect every business, but every mutation records the actor and the target business.
 
-Tenant ensures are idempotent by normalized slug and scoped idempotency key. The existing `identity_tbl_DirectoryKey` contains a mandatory user FK, so it cannot store tenant keys without an additive redesign or a separate tenant-key table. A reused key with different intent returns a conflict. Concurrency tests must cover the same key with different payloads, not just sequential retries.
+The implemented Identity v2 tenant endpoint creates by unique slug and returns 409 for duplicates; it is not an ensure/idempotency endpoint. Consumers list and select the existing tenant explicitly. User-directory idempotency retains its existing keys and rejects changed intent. The existing `identity_tbl_DirectoryKey` has a mandatory user FK and must not be reused for future tenant idempotency without an additive redesign.
 
 Do not silently change the existing `/api/token` wire types or `superAdmin` calculation while renaming database columns. Numeric IDs accepted by JavaScript clients must be safe integers; any future decimal-string representation requires an explicit versioned contract change. Session tokens retain their existing entropy and width even if their columns are renamed. A `uid` prefix does not justify converting an existing 64-character session credential to UUIDv4.
 
@@ -91,7 +91,7 @@ No platform-owned foreign key crosses a database boundary, even when both databa
 | Membership disabled or role changed | Invalidate authorization for existing sessions; specify a durable event or bounded online check |
 | `tenant.merged` | Reserved until conflict/reconciliation behavior is implemented across all consumers; no partial POC merge UI |
 
-The producer writes its authoritative change and durable event/outbox in one database transaction. Consumers durably apply effects and record deduplication/cursor state atomically before returning 2xx. Retry/catch-up must tolerate duplicates and ordering changes. Only advance the ordered catch-up cursor over the stream actually read and handled; receiving a later webhook cannot skip earlier unseen changes. Boot catch-up follows all pages, and reconciliation is available for abandoned deliveries.
+For tenant/membership authorization, the implemented POC uses fresh online Identity session/tenant checks; no tenant/membership event feed or cached authorization fallback is implemented. Existing Identity user events retain their supported consumer flow. Where durable events are used, the producer writes its authoritative change and event/outbox in one database transaction. Consumers durably apply effects and record deduplication/cursor state atomically before returning 2xx. Retry/catch-up must tolerate duplicates and ordering changes. Only advance the ordered catch-up cursor over the stream actually read and handled; receiving a later webhook cannot skip earlier unseen changes. Boot catch-up follows all pages, and reconciliation is available for abandoned deliveries.
 
 For calls, `UNIQUE(uidCallSession, iSequenceNumber)` only prevents duplicates; it does not allocate an ordered gap-free sequence. Allocate the next sequence under a call-row lock or equivalent transaction, then persist state/event/outbox together. Command claiming must be idempotent and compare `expectedCallVersion` before side effects. Provider operations are not part of the SQL transaction, so persist intent/results and reconcile interrupted work instead of claiming exactly-once network effects.
 

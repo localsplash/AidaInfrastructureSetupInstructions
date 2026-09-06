@@ -2,60 +2,63 @@
 
 Host: `dockerappvm01-dev`. Development domain: `localsplash.dev`.
 
-The Aida repositories have been obtained locally and the implemented applications build. The consolidated platform is not yet deployed. This readiness report records work actually executed, separately from the target in the [master plan](PLATFORM_MASTER_PLAN.md).
+The first implementation wave is built, tested and proposed in PRs. AidaAgent and AidaHandset now have real applications. The combined platform has **not** been deployed or validated with a real PBX/LiveKit/Android call. Existing Echo, Identity and NocoDB services and their data remain unchanged.
 
-## Local source and builds
+## Implementation PRs
 
-| Repository | Local path | Result |
+| Repository / PR | Local reviewed source | Delivered |
 | --- | --- | --- |
-| AidaInfrastructureSetupInstructions | `/opt/aida/AidaInfrastructureSetupInstructions` | Proposed corrected plan on local branch `plan/unified-office-platform` |
-| AidaAdmin | `/opt/aida/AidaAdmin` | Node 22 typecheck, production build and 204 tests passed; 8 live integration tests skipped |
-| OfficePulseAidaIntegration | `/opt/aida/OfficePulseAidaIntegration` | Node 22 typecheck, production build and 163 tests passed |
-| AidaAgent | `/opt/aida/AidaAgent` | README only; no worker source/build |
-| AidaHandset | `/opt/aida/AidaHandset` | README only; no Android source/APK |
-| AidaControl | `/opt/aida/AidaControl` | Empty repository; separate service deferred by owner decision |
+| [identity #18](https://github.com/localsplash/identity/pull/18) | `/opt/platform-work/identity`, `0ccd788` plus separately preserved deployed baseline | Central users/tenants/memberships/SSO and app sessions; actor directory APIs; PlatformConfig; mapping utilities |
+| [AidaAdmin #32](https://github.com/localsplash/AidaAdmin/pull/32) | `/opt/aida/AidaAdmin`, `bacb7b7` | PostgreSQL removed; central sessions/directory; MySQL state/receipts/audit; voice profiles and runtime enrollment |
+| [OfficePulse #11](https://github.com/localsplash/OfficePulseAidaIntegration/pull/11) | `/opt/aida/OfficePulseAidaIntegration`, `101a694` | Canonical tenants, scoped device APIs, public/private listeners, transactional commands/lifecycle/webhooks, per-DID offline fallback |
+| [AidaAgent #8](https://github.com/localsplash/AidaAgent/pull/8) | `/opt/aida/AidaAgent`, `438e32d` | Python LiveKit worker, reliable live transcripts, bounded agent handoff |
+| [AidaHandset #9](https://github.com/localsplash/AidaHandset/pull/9) | `/opt/aida/AidaHandset`, `a758866` | Android enrollment, encrypted credentials, assigned-call list, data-only transcript viewer, versioned takeover |
+| [EchoDatabase #9](https://github.com/localsplash/EchoDatabase/pull/9) | `/opt/platform-work/EchoDatabase`, `ff4939c` | Additive historical organization/number/user mappings and dry-run importer |
+| [EchoWeb #22](https://github.com/localsplash/EchoWeb/pull/22) | `/opt/platform-work/EchoWeb`, `b2ab311` | Central sessions, current memberships, business-number picker, scoped messaging proxy and SUPER_ADMIN carrier controls |
+| [Platform architecture / deployment #17](https://github.com/localsplash/AidaInfrastructureSetupInstructions/pull/17) | `/opt/aida/AidaInfrastructureSetupInstructions`, `plan/unified-office-platform` | Master design, issue reconciliation, data standard and isolated development Compose |
 
-The application checkouts are unchanged. The local host's Node 18 is below the implemented applications' Node 22 requirement, so validation used isolated Docker builds. Tests used repository fixtures/fakes; there were no live PBX/LiveKit/device calls or database migration rehearsals in this review.
+GitHub commits have equivalent trees but different commit IDs from the local checkouts because publication used the authenticated GitHub API. Record the remote PR head SHAs when creating a release. All application PRs are draft proposals for coordinated rollout, not live deployment claims.
 
-| Image | ID | Purpose |
+AidaControl remains deferred; OfficePulse owns voice orchestration. No replacement service is needed merely to fill that repository. EchoOrchestrator remains the existing Echo operational entry point; the small Aida composition in this repository prepares the additional containers without a monolithic installer or repository merge.
+
+## Validation actually performed
+
+| Component | Evidence |
+| --- | --- |
+| Identity | Node 22 build, 160 unit/contract tests and 13 real MySQL integration tests |
+| AidaAdmin | Formatting/lint/typecheck/build, 155 server + 46 UI tests; five real MySQL tests; production image and non-root asset-directory write check |
+| OfficePulse | Typecheck/build, 180 unit/HTTP/contract tests; 15 substantive MySQL scenarios (17 TAP tests including suite parents); production image and packaged-migration rerun |
+| AidaAgent | Ruff, 82 tests, installed LiveKit Agents 1.8.0/Silero/inference checks and offline CLI validation; non-root runtime image |
+| AidaHandset | 15 unit/HTTP tests, Android lint and real debug APK assembly |
+| EchoWeb / EchoDatabase | 15 unit/HTTP tests plus four real MySQL migration/importer tests; production image |
+| Development Compose | Synthetic `docker compose config --quiet`, port/trust/credential assertions, build-context checks and MySQL init-script validation |
+
+All MySQL tests used disposable schemas/containers. Provider-facing Agent tests ran offline without paid calls. Local reports live under `/opt/platform-review`. GitHub CI was verified successful for Identity, AidaAdmin and AidaAgent at this point; other PR checks should be read from their latest heads before merge.
+
+The installable handset debug artifact is `/opt/platform-review/aida-handset-debug.apk` (SHA-256 `63ef14f01cbe5b8d6e986e0859d2fd89470290e2b32e08f91893eec924e01abc`). It is not a signed production release and has not been exercised on the actual office handset.
+
+## Planned NPM mappings
+
+These ports are reserved by the prepared composition; **the services are not listening yet**.
+
+| Hostname | Host port → container | Purpose |
 | --- | --- | --- |
-| `aida-admin:review-98d63ba` | `sha256:f13b1f7ba49a962f1650cdbfad4c2069b0924f0bdb678d1a5d162ef66d7efb95` | AidaAdmin repository production Dockerfile build |
-| `aida-admin:validation-98d63ba` | `sha256:2ca25b934964dec664d181e1ec1f8af22cecfddb2f97fb0091af923adc39a825` | Admin typecheck/tests/build |
-| `aida-officepulse-validation:291e2d9` | `sha256:57abf5ae70628cb776583be93233f06fd108fc9f5ccb2bf738159d42c8d0cfa8` | OfficePulse typecheck/tests/build; not a deployment image |
+| `aida-admin.localsplash.dev` | `18086 → 3001` | Administration and Identity callback |
+| `aida-api.localsplash.dev` | `18085 → 8086` | Handset APIs and signed LiveKit webhooks |
 
-Validation recipes are in [`validation/`](../validation/officepulse-validation.Dockerfile). They intentionally install development dependencies and run tests; use application production Dockerfiles for released services. Reproduce from the recorded source commits, with each repository as the build context:
+Agent has no public HTTP ingress. Android is installed as an APK. Private OfficePulse `8085` stays inside the Aida Docker network. FastAGI is a separate PBX-only TCP mapping. The Compose defaults bind published ports to loopback; select the actual private interface NPM/PBX can reach. See [the deployment runbook](DEV_DOCKER_DEPLOYMENT.md).
 
-```bash
-docker build -f /opt/aida/AidaInfrastructureSetupInstructions/validation/aida-admin-validation.Dockerfile -t aida-admin:validation-98d63ba /opt/aida/AidaAdmin
-docker build -f /opt/aida/AidaInfrastructureSetupInstructions/validation/officepulse-validation.Dockerfile -t aida-officepulse-validation:291e2d9 /opt/aida/OfficePulseAidaIntegration
-```
+## Work before combined POC acceptance
 
-## Existing local baseline
+1. Rehearse the Identity database/settings copy and canonical mappings while preserving users, provider identities and sessions. The deployed `/opt/identity` worktree was preserved in a separate source commit; it was not overwritten. Establish several canonical businesses and reviewed memberships before switching consumers. Legacy app cookies obtain a fresh central SSO handoff; account access and history are retained.
+2. Bootstrap/import PlatformConfig voice profiles with explicit legacy tenant mappings. Keep remote Aida source stores available. No remote POC runtime was verified.
+3. Select the PBX and provide its supported ARI/Realtime/LiveKit trunk configuration, a test DID, local fallback and an actual handset. Apply only supported integration configuration; leave vendor schemas upstream-owned.
+4. Configure the isolated Aida composition and NPM, then run real login, enrollment, transcript, takeover, hangup and dependency-loss tests for two businesses and SUPER_ADMIN.
+5. Complete EchoService and EchoMedia tenant-aware authorization/media delivery before claiming the entire messaging/media surface is isolated. EchoWeb's new boundary does not make existing direct service endpoints or public media URLs private. Per-business carrier-account administration and historic media ownership remain explicit follow-up work.
+6. Verify existing Echo send/receive, media and logins after the coordinated cutover. Review the old Echo migration runner's ledger/baselining before applying new SQL to an existing volume. Take and restore-rehearse backups before retiring any source store.
 
-Docker reported healthy EchoWeb, EchoService, EchoMedia, Echo MySQL, Identity and Identity MySQL containers. NocoDB is also running. This was read-only process inspection; it does not validate business workflows. Their volumes and deployed configuration were not migrated.
+## Superseded proposals and review packet
 
-The Identity worktree contains local setup/configuration/deployment changes absent from GitHub main, including `src/localConfig.ts`. Preserve and reconcile those changes before rebuilding Identity from a remote branch. Echo repositories were clean at inventory time; EchoOrchestrator was on `feat/echo-service-log-volume`. [Source inventory](reviews/source-inventory.json).
+[Infra PR #16](https://github.com/localsplash/AidaInfrastructureSetupInstructions/pull/16) was closed in favor of #17. [EchoDatabase PR #3](https://github.com/localsplash/EchoDatabase/pull/3) was closed; its duplicate Identity schema creation and stale drops were not merged. No implementation PR has been merged in this development wave.
 
-Other services share the host, including unrelated PostgreSQL workloads. The telephony MySQL standard does not apply to those services. The existing port 3001 is already in use on the host, so AidaAdmin's default must not be published there in the local composition.
-
-## Deployment prerequisites and implementation gaps
-
-1. Select the existing PBX target versus a separate local PBX and configure only its supported adapter endpoints/credentials. The remote POC was not accessed. Do not assume an Asterisk instance exists on this development host.
-2. Reconcile Identity/configuration compatibility and central tenants before connecting Admin to the working platform stores. Current Admin can migrate its legacy stores and register Identity callbacks on startup, so starting it with copied credentials is already a state-changing integration action.
-3. Migrate Admin's PostgreSQL sessions/state/receipts to its owned MySQL store. Its current reader uses legacy NocoDB bases; the compiled image does not implement the proposed PlatformConfig contract yet.
-4. Complete OfficePulse's canonical tenant mapping, handset auth/tokens, active-call discovery, command concurrency, call lifecycle and per-DID offline fallback. Preserve existing provisioned SIP identifiers during tenant conversion.
-5. Supply Agent and Handset implementations, or obtain and validate their actual source from the other POC. Current GitHub repositories cannot produce either application.
-6. Configure reviewed LiveKit/provider/notification details, a test DID, two businesses, authorized users, extensions and actual Android handset access. Keep credentials in server-side configuration; do not paste them into issue bodies or the review packet.
-7. Produce the isolated Compose/profile and proxy configuration against these corrected interfaces, using non-conflicting ports/volumes and pinned artifacts. Run the [combined acceptance gates](PLATFORM_MASTER_PLAN.md#combined-poc-acceptance).
-
-## Review packet
-
-- [Master architecture and issue-by-issue reconciliation](PLATFORM_MASTER_PLAN.md)
-- [Corrected data/configuration/migration standard](PLATFORM_DATA_STANDARD.md)
-- [Dependency-ordered implementation sequence](POC_REPOSITORY_BUILD_SEQUENCE.md)
-- [Aida architecture and PR16 review](reviews/aida-review.md)
-- [Echo code, migration and access review](reviews/echo-review.md)
-- [Voice runtime, Agent and Handset review](reviews/voice-clients-review.md)
-- [Admin configuration/build details](reviews/aida-admin-readiness.md)
-
-These are local proposed changes. GitHub issues and pull requests have not been modified, merged or closed. Infra PR #16 should be corrected to this agreed runtime direction; EchoDatabase PR #3 should not be merged with its stale Identity schema/drop operations. The master plan states the intended disposition for every linked item.
+The original source review is retained in [the Aida review](reviews/aida-review.md), [Echo review](reviews/echo-review.md), [voice/client review](reviews/voice-clients-review.md) and [source inventory](reviews/source-inventory.json). Those describe the pre-implementation baseline. The current architecture and remaining acceptance gates are in the [master plan](PLATFORM_MASTER_PLAN.md), [data standard](PLATFORM_DATA_STANDARD.md) and [implementation sequence](POC_REPOSITORY_BUILD_SEQUENCE.md).

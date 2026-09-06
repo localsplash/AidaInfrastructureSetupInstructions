@@ -1,5 +1,6 @@
 # Unified office Voice and Messaging platform
 
+Current delivery: [first-wave implementation PRs, test evidence and remaining acceptance work](LOCAL_DEV_READINESS.md). The design below is the target; it does not claim the composed POC is already deployed.
 Review date: 2026-09-06. Status: proposed implementation baseline, incorporating the owner's decisions in this review. This document describes the target and the work remaining; it is not evidence of a deployed combined POC.
 
 The platform shares people, business tenants, access policy, configuration, and release operations. Echo supplies messaging; Aida supplies voice. Keep the working Echo implementation and reuse the existing AidaAdmin and OfficePulse code. Build the missing Agent and Handset. OfficePulseAidaIntegration is the sole voice runtime orchestrator for this POC; a separate AidaControl process is deferred.

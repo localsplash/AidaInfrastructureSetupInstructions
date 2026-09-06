@@ -2,7 +2,7 @@
 
 The [master plan](PLATFORM_MASTER_PLAN.md) and
 [data standard](PLATFORM_DATA_STANDARD.md) define the target architecture.
-This sequence replaces the previous greenfield AidaControl build order.
+This sequence replaces the previous greenfield AidaControl build order. The [implementation/readiness report](LOCAL_DEV_READINESS.md) records the PRs and completed builds; the gates below remain the release acceptance sequence.
 
 ## 1. Baseline and boundaries
 
@@ -13,8 +13,8 @@ production uses `localsplash.ai`. Application protocols use configurable
 Echo is working and its data and access must survive this work. Identity works
 independently for Echo and Aida and requires deliberate consolidation.
 AidaAdmin and OfficePulseAidaIntegration contain application code. AidaControl
-is empty; AidaAgent and AidaHandset currently have no deployable application
-baseline in their repositories. Existing POC artifacts on another server may
+is deferred. AidaAgent and AidaHandset now have tested worker/Android implementations
+in the first-wave PRs. Existing POC artifacts on another server may
 be reused after their source and version are located and validated.
 
 OfficePulseAidaIntegration remains the sole call orchestrator and runtime
@@ -38,7 +38,7 @@ Platform people and membership are reached through identity APIs.
 | Operations / EchoOrchestrator | Host/store inventory, verified backups, isolated Aida composition, pinned releases | Current host | Existing Echo services, data and ports preserved |
 | Platform contract | Canonical IDs, scoped settings, API/event contracts, migration mappings | Current-code review | One runtime owner and consistent contract |
 | identity | `platform_db`, tenant/membership directory, `PlatformConfig` bootstrap, authorization/events | Contract; identity data inventory | Login continuity, explicit ID mapping, multi-business isolation |
-| AidaAdmin | Reuse UI/BFF; directory-only platform data access; config ownership; MySQL session/state/receipts | identity contract/bootstrap | Scoped administration, provisioning feedback, durable sessions/events |
+| AidaAdmin | Reuse UI/BFF; directory-only platform data access; config ownership; central sessions plus MySQL state/receipts | identity contract/bootstrap | Scoped administration, provisioning feedback, durable sessions/events |
 | OfficePulseAidaIntegration | Adapt existing runtime; complete lifecycle, concurrency, device and viewer API | Contract; Admin configuration | One runtime; real screening and fallback |
 | AidaAgent | Reuse verified POC source or implement deployable worker | Runtime and LiveKit contract | Real agent, live transcript, handoff acknowledgment |
 | AidaHandset | Reuse verified source or implement enrollment, notifications, data-only viewer and takeover | Runtime device API; agent events | Physical Android handset completes real workflow |
@@ -67,7 +67,7 @@ in parallel. Documentation is not evidence that an integration is implemented.
    actor context for directory administrative writes and privilege changes.
 2. Define settings scopes/precedence, bootstrap, required keys, overrides and
    secret visibility. One logical base need not use one unrestricted token.
-3. Name every SQL owner, including Admin's sessions, login state and identity
+3. Name every SQL owner, including Identity's shared staff sessions and Admin's login state and identity
    receipts. Replace the existing Admin PostgreSQL store explicitly; the
    MySQL-only target does not make that implementation disappear.
 4. Pin compatible call, event, command, enrollment, token, transcript and error
@@ -85,7 +85,7 @@ in parallel. Documentation is not evidence that an integration is implemented.
    direct platform-user editing through a second NocoDB base.
 4. Backfill Aida tenant UUID references to canonical `iTenantId`, validate all
    configuration references, and keep source rows and mappings for rollback.
-5. Migrate Admin's durable session/state/event store under its MySQL owner.
+5. Move Admin staff sessions to Identity and its OAuth state/receipts/audit to Admin-owned MySQL.
    Preserve the chosen session policy deliberately.
 6. Retain required appearance and device configuration. Put consumable
    enrollment credentials and runtime state with the runtime owner. SIP secrets
