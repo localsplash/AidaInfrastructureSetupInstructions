@@ -1,0 +1,171 @@
+# Planned development composition. This file does not alter the existing Echo stack.
+name: aida-dev
+
+services:
+  aida-mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${AIDA_MYSQL_ROOT_PASSWORD:?Set a new Aida-only database root password}
+      AIDA_RUNTIME_DB_PASSWORD: ${AIDA_RUNTIME_DB_PASSWORD:?Set 64 hex characters}
+      AIDA_ADMIN_DB_PASSWORD: ${AIDA_ADMIN_DB_PASSWORD:?Set 64 hex characters}
+      AIDA_RUNTIME_READER_DB_PASSWORD: ${AIDA_RUNTIME_READER_DB_PASSWORD:?Set 64 hex characters}
+    volumes:
+      - aida-mysql:/var/lib/mysql
+      - ./mysql-init/10-aida-databases.sh:/docker-entrypoint-initdb.d/10-aida-databases.sh:ro
+    networks:
+      aida:
+        ipv4_address: ${AIDA_MYSQL_IPV4:-172.30.88.12}
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysql --protocol=socket --user=root --batch --skip-column-names --execute='SELECT 1' >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+  officepulse:
+    image: ${AIDA_OFFICEPULSE_IMAGE:-aida-officepulse:dev}
+    build:
+      context: ../../OfficePulseAidaIntegration
+    restart: unless-stopped
+    init: true
+    depends_on:
+      aida-mysql:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      LOG_LEVEL: info
+      OFFICEPULSE_INSTANCE_ID: ${OFFICEPULSE_INSTANCE_ID:-dockerappvm01-dev}
+      HTTP_BIND: 0.0.0.0
+      HTTP_PORT: "8085"
+      PUBLIC_HTTP_PORT: "8086"
+      # Only Admin may use the private listener; it is never host-published.
+      TRUSTED_SERVER_CIDRS: ${AIDA_ADMIN_IPV4:-172.30.88.10}/32
+      TRUSTED_PROXY_CIDRS: ${AIDA_TRUSTED_PROXY_CIDRS:?Set the actual NPM peer CIDRs}
+      FASTAGI_BIND: 0.0.0.0
+      FASTAGI_PORT: ${AIDA_FASTAGI_PORT:-4573}
+      FASTAGI_ADVERTISED_HOST: ${AIDA_FASTAGI_ADVERTISED_HOST:?Set the address reachable from the PBX}
+      ARI_URL: ${AIDA_ARI_URL:?Set the existing PBX ARI URL}
+      ARI_USERNAME: ${AIDA_ARI_USERNAME:?Set the supported PBX adapter user}
+      ARI_PASSWORD: ${AIDA_ARI_PASSWORD:?Set the PBX adapter password}
+      ARI_APP: ${AIDA_ARI_APP:-aida}
+      MYSQL_HOST: ${AIDA_ASTERISK_MYSQL_HOST:?Set the existing PBX MySQL host}
+      MYSQL_PORT: ${AIDA_ASTERISK_MYSQL_PORT:-3306}
+      MYSQL_USER: ${AIDA_ASTERISK_MYSQL_USER:?Set the supported PBX database adapter user}
+      MYSQL_PASSWORD: ${AIDA_ASTERISK_MYSQL_PASSWORD:?Set the PBX database adapter password}
+      MYSQL_DATABASE: ${AIDA_ASTERISK_MYSQL_DATABASE:-asterisk}
+      RUNTIME_MYSQL_HOST: aida-mysql
+      RUNTIME_MYSQL_PORT: "3306"
+      RUNTIME_MYSQL_USER: aida_runtime
+      RUNTIME_MYSQL_PASSWORD: ${AIDA_RUNTIME_DB_PASSWORD}
+      RUNTIME_MYSQL_DATABASE: aida_db
+      NOCODB_BASE_URL: ${NOCODB_BASE_URL:?Set the existing NocoDB URL}
+      NOCODB_API_TOKEN: ${AIDA_RUNTIME_NOCODB_API_TOKEN:?Set a scoped runtime NocoDB token}
+      NOCODB_BASE_NAME: PlatformConfig
+      IDENTITY_BASE_URL: ${IDENTITY_BASE_URL:?Deploy and rehearse central Identity first}
+      IDENTITY_CLIENT_SECRET: ${AIDA_RUNTIME_ID_CLIENT_SECRET:-}
+      LIVEKIT_URL: ${LIVEKIT_URL:?Set the LiveKit project URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY:?Set the LiveKit server key}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET:?Set the LiveKit server secret}
+      LIVEKIT_AGENT_NAME: ${AIDA_AGENT_NAME:-aida-prime-dev}
+      LIVEKIT_SIP_HOST: ${LIVEKIT_SIP_HOST:?Set the existing LiveKit SIP host}
+      LIVEKIT_TRUNK_ENDPOINT: ${LIVEKIT_TRUNK_ENDPOINT:?Set the existing PBX LiveKit trunk endpoint}
+      HANDSET_API_URL: ${AIDA_PUBLIC_API_URL:-https://aida-api.localsplash.dev}
+      CALL_DEFAULT_LOCALE: ${AIDA_DEFAULT_LOCALE:-en-US}
+    ports:
+      - "${AIDA_PROXY_BIND_IP:-127.0.0.1}:18085:8086"
+      # Raw FastAGI TCP, not HTTP/NPM. Restrict the chosen host IP to PBX ingress.
+      - "${AIDA_PBX_BIND_IP:-127.0.0.1}:${AIDA_FASTAGI_PORT:-4573}:${AIDA_FASTAGI_PORT:-4573}"
+    networks:
+      aida:
+        ipv4_address: ${AIDA_RUNTIME_IPV4:-172.30.88.11}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8085/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  aida-admin:
+    image: ${AIDA_ADMIN_IMAGE:-aida-admin:dev}
+    build:
+      context: ../../AidaAdmin
+      target: runtime
+    restart: unless-stopped
+    init: true
+    depends_on:
+      aida-mysql:
+        condition: service_healthy
+      officepulse:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      LOG_LEVEL: info
+      E2E_FAKE_SESSION: "false"
+      PUBLIC_BASE_URL: ${AIDA_ADMIN_PUBLIC_URL:-https://aida-admin.localsplash.dev}
+      SESSION_SECRET: ${AIDA_ADMIN_SESSION_SECRET:?Set a long random Admin secret}
+      AIDA_ADMIN_DATABASE_URL: mysql://aida_admin:${AIDA_ADMIN_DB_PASSWORD}@aida-mysql:3306/aida_admin_db
+      OFFICEPULSE_RUNTIME_DATABASE_URL: mysql://aida_runtime_reader:${AIDA_RUNTIME_READER_DB_PASSWORD}@aida-mysql:3306/aida_db
+      OFFICEPULSE_PROVISIONING_BASE_URL: http://officepulse:8085
+      HANDSET_PROVISIONING_URL: ${AIDA_PUBLIC_API_URL:-https://aida-api.localsplash.dev}
+      NOCODB_BASE_URL: ${NOCODB_BASE_URL}
+      NOCODB_API_TOKEN: ${AIDA_ADMIN_NOCODB_API_TOKEN:?Set a scoped Admin NocoDB token}
+      ID_BASE_URL: ${IDENTITY_BASE_URL}
+      ID_CLIENT_SECRET: ${AIDA_ADMIN_ID_CLIENT_SECRET:-}
+      ID_PARENT_DOMAIN: ${PLATFORM_PARENT_DOMAIN:-localsplash.dev}
+      ID_TRUSTED_APP_CIDRS: ${AIDA_ID_TRUSTED_APP_CIDRS:?Set the Identity-approved app egress CIDRs}
+      ID_EVENT_SOURCE_CIDRS: ${AIDA_ID_EVENT_SOURCE_CIDRS:?Set actual Identity event sender CIDRs}
+      ID_TRUSTED_PROXY_CIDRS: ${AIDA_TRUSTED_PROXY_CIDRS}
+      ID_REGISTER_WEBHOOK: "false"
+      ASSET_STORAGE_DIR: /app/data/assets
+    ports:
+      - "${AIDA_PROXY_BIND_IP:-127.0.0.1}:18086:3001"
+    volumes:
+      - aida-admin-assets:/app/data/assets
+    networks:
+      aida:
+        ipv4_address: ${AIDA_ADMIN_IPV4:-172.30.88.10}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  aida-agent:
+    image: ${AIDA_AGENT_IMAGE:-aida-agent:dev}
+    build:
+      context: ../../AidaAgent
+      target: runtime
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 60s
+    environment:
+      LIVEKIT_URL: ${LIVEKIT_URL}
+      LIVEKIT_API_KEY: ${LIVEKIT_API_KEY}
+      LIVEKIT_API_SECRET: ${LIVEKIT_API_SECRET}
+      AIDA_AGENT_NAME: ${AIDA_AGENT_NAME:-aida-prime-dev}
+      AIDA_STT_MODEL: ${AIDA_STT_MODEL:-deepgram/nova-3-general}
+      AIDA_LLM_MODEL: ${AIDA_LLM_MODEL:-openai/gpt-4.1-mini}
+      AIDA_TTS_MODEL: ${AIDA_TTS_MODEL:-cartesia/sonic-3}
+      AIDA_TTS_VOICE: ${AIDA_TTS_VOICE:-9626c31c-bec5-4cca-baa8-f8ba9e84c8bc}
+    # No public ports: this worker registers outbound with LiveKit.
+    networks:
+      aida:
+        ipv4_address: ${AIDA_AGENT_IPV4:-172.30.88.13}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8081/', timeout=2)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+networks:
+  aida:
+    ipam:
+      config:
+        - subnet: ${AIDA_NETWORK_SUBNET:-172.30.88.0/24}
+
+volumes:
+  aida-mysql:
+  aida-admin-assets:
