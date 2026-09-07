@@ -1,7 +1,7 @@
 # Local development readiness — 2026-09-06
 
-> Historical preparation document. The isolated preview has since launched; see
-> [running preview status](DEV_PREVIEW_STATUS.md) for its actual topology and current limits.
+> Historical preparation document. The local development deployment has since launched; see
+> [running local development status](DEV_LOCAL_STATUS.md) for its actual topology and current limits.
 
 Host: `dockerappvm01-dev`. Development domain: `localsplash.dev`.
 

@@ -29,7 +29,7 @@ supersede conflicting historical documents and issue instructions:
 2. [Platform data standard](docs/PLATFORM_DATA_STANDARD.md)
 3. [Implementation and validation sequence](docs/POC_REPOSITORY_BUILD_SEQUENCE.md)
 
-The [running preview status](docs/DEV_PREVIEW_STATUS.md) records the launched
+The [running local development status](docs/DEV_LOCAL_STATUS.md) records the launched
 containers, exact NPM destinations, preserved data and remaining voice setup.
 The [earlier readiness report](docs/LOCAL_DEV_READINESS.md) retains the initial
 implementation/build evidence and source reviews.
