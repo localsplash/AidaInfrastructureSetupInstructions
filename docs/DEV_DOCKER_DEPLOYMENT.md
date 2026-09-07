@@ -1,5 +1,7 @@
 # Planned Aida development deployment
 
+Current number ownership, SSO, and call-store migration: [Shared numbers rollout](SHARED_NUMBERS_ROLLOUT.md). This supersedes earlier Echo-local number authorization descriptions.
+
 > Historical preparation document. The local development deployment has since launched; see
 > [running local development status](DEV_LOCAL_STATUS.md) for its actual topology and current limits.
 
@@ -38,7 +40,7 @@ NocoDB, and unrelated containers remain under their existing deployment owners.
 | OfficePulse private HTTP | **No host port**, `officepulse:8085` inside Aida network | Admin provisioning and administrative commands |
 | OfficePulse FastAGI | PBX-facing IP, `4573 → 4573` by default | Raw TCP from the selected Asterisk adapter |
 | AidaAgent | **No host port** | Outbound LiveKit agent registration/media |
-| Aida MySQL | **No host port** | New `aida_db` and `aida_admin_db` only |
+| Aida MySQL | **No host port** | New `aidacalls_db` and `aida_admin_db` only |
 
 NPM should eventually map `aida-admin.localsplash.dev` to host port **18086** and
 `aida-api.localsplash.dev` to **18085**, using HTTP upstreams with HTTPS at NPM.
@@ -82,9 +84,9 @@ The fresh-MySQL initialization script creates:
 
 | Database account | Grants |
 | --- | --- |
-| `aida_runtime` | Owns `aida_db` schema/data and runs OfficePulse migrations |
+| `aida_runtime` | Owns `aidacalls_db` schema/data and runs OfficePulse migrations |
 | `aida_admin` | Owns `aida_admin_db` OAuth state, event receipts and audit storage |
-| `aida_runtime_reader` | `SELECT` only on `aida_db`, supplied only to Admin |
+| `aida_runtime_reader` | `SELECT` only on `aidacalls_db`, supplied only to Admin |
 
 Identity's `platform_db` and Echo's `echo_db` are not created, renamed, or mounted
 by this composition. Asterisk adapter values point to the existing PBX database;

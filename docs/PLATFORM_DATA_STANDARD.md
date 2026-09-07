@@ -1,5 +1,7 @@
 # Platform Data Standard
 
+Current number ownership, SSO, and call-store migration: [Shared numbers rollout](SHARED_NUMBERS_ROLLOUT.md). This supersedes earlier Echo-local number authorization descriptions.
+
 Status: agreed design and first implementation wave for the Echo/Aida office platform, 2026-09-06. See [actual PR/build status](LOCAL_DEV_READINESS.md); unimplemented target requirements below remain acceptance work. Read with [the master plan](PLATFORM_MASTER_PLAN.md). This supersedes conflicting storage/ownership recommendations in the older Aida documents for the POC. It does not mandate changes to unrelated LocalSplash applications or upstream vendor products on the same host.
 
 ## 1. Ownership and stores
@@ -8,7 +10,7 @@ Status: agreed design and first implementation wave for the Echo/Aida office pla
 | --- | --- | --- |
 | MySQL `platform_db` | Users, identities, Identity SSO/application sessions and handoff codes, tenants, membership, Identity registry/events/delivery | identity |
 | MySQL `echo_db` | Messaging, carriers, canonical-ID projections | EchoDatabase; named Echo services receive domain-specific runtime grants |
-| MySQL `aida_db` | Call sessions/events/commands, device sessions, voice provisioning runtime | OfficePulseAidaIntegration for the POC |
+| MySQL `aidacalls_db` | Call sessions/events/commands, device sessions, voice provisioning runtime | OfficePulseAidaIntegration for the POC |
 | MySQL `aida_admin_db` | AidaAdmin OAuth state, event processing and operation audit | AidaAdmin |
 | NocoDB base `PlatformConfig` | Deployment settings and slow-changing application desired configuration | identity creates base/settings schema; each owning app migrates its own tables |
 | Upstream Asterisk stores | Vendor realtime, dialplan, CDR/CEL and SIP authentication | Upstream Asterisk/OfficePulse; no platform-owned vendor schema migrations |
@@ -119,7 +121,7 @@ The tenant conversion manifest is immutable provenance: source system, source te
 
 Asterisk's schema and database naming are upstream-owned. OfficePulse may provision approved realtime rows and deployment include files, generated contexts and prompts. Its migrations target its own runtime database only. Generated records have stable ownership markers and tenant-safe namespaces; reconciliation does not delete unrelated upstream records.
 
-The existing OfficePulse runtime database is conventionally `aida_officepulse`. Its current provisioning implementation also uses owned companion tables `aida_object`, `aida_device`, and `aida_provisioning_request` beside vendor realtime tables. Adopt/relocate only those owned records into the integration-owned target, preserving endpoint IDs, legacy tenant mappings and provisioning idempotency history. Do not run the current companion-table `deploy/sql/schema.sql` against the PBX as though it were the new platform migration plan. Keep supported provisioning writes to vendor tables through the adapter, with explicit cross-store reconciliation after relocation.
+The existing OfficePulse runtime database is conventionally `aidacalls_db`. Its current provisioning implementation also uses owned companion tables `aida_object`, `aida_device`, and `aida_provisioning_request` beside vendor realtime tables. Adopt/relocate only those owned records into the integration-owned target, preserving endpoint IDs, legacy tenant mappings and provisioning idempotency history. Do not run the current companion-table `deploy/sql/schema.sql` against the PBX as though it were the new platform migration plan. Keep supported provisioning writes to vendor tables through the adapter, with explicit cross-store reconciliation after relocation.
 
 SIP authentication secrets persist only in the approved Asterisk authentication store. On creation/rotation, deliver the secret once through the authenticated provisioning channel; never place it in NocoDB, runtime snapshots, admin audit, logs or source. Record provisioning status and reference IDs separately. The adapter must not offer readback of previously stored SIP secrets.
 

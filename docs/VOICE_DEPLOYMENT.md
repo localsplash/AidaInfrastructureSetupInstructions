@@ -1,5 +1,7 @@
 # Deploy the voice POC with an existing OfficePulse PBX
 
+Current number ownership, SSO, and call-store migration: [Shared numbers rollout](SHARED_NUMBERS_ROLLOUT.md). This supersedes earlier Echo-local number authorization descriptions.
+
 This is the current operator guide for the unified platform. It supplements
 [the running local inventory](DEV_LOCAL_STATUS.md) and replaces the historical
 pre-launch assumptions in DEV_DOCKER_DEPLOYMENT.md. Use the reviewed `main`
@@ -39,7 +41,7 @@ The persistent compositions are under `/opt/platform-local/`:
 - `agent/compose.yaml`: local Agent; needs real worker settings before activation.
 
 Preserve their named volumes. Rebuilding a container does not migrate data to a
-new server. Back up and restore-rehearse `platform_db`, `aida_db`,
+new server. Back up and restore-rehearse `platform_db`, `aidacalls_db`,
 `aida_admin_db`, `echo_db`, NocoDB data/configuration, and Admin/media assets for
 a server move. Preserve provider identities, sessions, tenant mappings and
 application secrets. The development cookie bridge is host-local and should
@@ -62,7 +64,7 @@ Use the files in [OfficePulseAidaIntegration](https://github.com/localsplash/Off
    `deploy/sql/grants.sql`. Apply `deploy/sql/schema.sql` only to create the
    integration-owned bookkeeping tables next to the existing Realtime data.
    It does not create or alter Asterisk's vendor tables. Set `MYSQL_*` to this
-   existing PBX database, not to `aida_db`.
+   existing PBX database, not to `aidacalls_db`.
 4. Install the reviewed `asterisk/extensions_aida.conf` include through the
    PBX's supported custom-include mechanism, and configure the MOH template as
    needed. Preserve the existing dialplan and recording integration.
@@ -79,7 +81,7 @@ Use the files in [OfficePulseAidaIntegration](https://github.com/localsplash/Off
 Back up the PBX configuration and integration bookkeeping before changes.
 The integration provisions desired rows via supported APIs; it does not own
 Asterisk upgrades. Do not run the historical `runtime-schema.sql` manually on
-the PBX: runtime migrations belong to the separately configured `aida_db` and
+the PBX: runtime migrations belong to the separately configured `aidacalls_db` and
 are packaged in the integration Docker image. Prefer the Docker path here;
 the older systemd installer comments predate the packaged migration contract.
 
@@ -129,7 +131,7 @@ provider setting changes. Required categories are:
 
 - Existing PBX: `OFFICEPULSE_INSTANCE_ID`, `ARI_*`, `MYSQL_*`, FastAGI address,
   trunk endpoint and codec/transport choices.
-- Owned runtime: `RUNTIME_MYSQL_*` pointing at the existing `aida_db`. Keep
+- Owned runtime: `RUNTIME_MYSQL_*` pointing at the existing `aidacalls_db`. Keep
   Admin's separate runtime reader account. Startup applies locked additive
   migrations to that database only.
 - Platform: Identity base URL and admitted server source; read access to the

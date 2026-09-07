@@ -31,7 +31,7 @@ private `8085` listener or publish it as a public application API.
 ## Internal services and repository roles
 
 The shared `platform-mysql-local:3306` engine has separate `platform_db`,
-`echo_db`, `aida_db` and `aida_admin_db` schemas and application-scoped users.
+`echo_db`, `aidacalls_db` and `aida_admin_db` schemas and application-scoped users.
 It has no host port. OfficePulse's private API, Agent, EchoService and EchoMedia
 stay internal. Agent's explicit status-only command returns health 200 and
 readiness 503; it imports no voice SDK and does not register for jobs or contact
