@@ -5,6 +5,9 @@ platform. The development target is `dockerappvm01-dev`, with separate
 application containers and explicit database ownership. OfficePulse/Asterisk
 remains an independently managed PBX.
 
+See [the current voice deployment guide](docs/VOICE_DEPLOYMENT.md) for the PBX,
+LiveKit, Agent and handset steps beyond this server.
+
 ## Accepted POC decisions
 
 - Preserve working Echo data and access throughout consolidation.
