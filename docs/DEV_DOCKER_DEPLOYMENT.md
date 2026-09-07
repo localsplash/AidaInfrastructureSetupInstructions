@@ -1,5 +1,8 @@
 # Planned Aida development deployment
 
+> Historical preparation document. The isolated preview has since launched; see
+> [running preview status](DEV_PREVIEW_STATUS.md) for its actual topology and current limits.
+
 Status: **prepared and configuration-validated; services have not been started**.
 This composition adds Aida to `dockerappvm01-dev`. The existing Echo, Identity,
 NocoDB, and unrelated containers remain under their existing deployment owners.

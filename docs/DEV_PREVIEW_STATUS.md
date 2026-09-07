@@ -1,0 +1,101 @@
+# Running development preview — 2026-09-06
+
+The coordinated preview is **launched** on `dockerappvm01-dev`. Nine containers
+are running, using isolated copied databases and scoped application users.
+Existing Echo, Identity, NocoDB and unrelated services remain unchanged; existing
+Echo media is mounted read-only. This report supersedes the earlier
+[pre-deployment readiness snapshot](LOCAL_DEV_READINESS.md) for deployment status.
+A complete PBX/LiveKit/Android call has not yet been validated.
+
+## Public entry points
+
+Nginx Proxy Manager entries remain user-managed and still need configuration.
+Use HTTPS on the browser hostname and HTTP to the listed Docker destination on
+`npm_network`. Loopback listeners support local checks; NPM should use the Docker
+name rather than its own `127.0.0.1`.
+
+| Development hostname | NPM HTTP destination | Host loopback listener |
+| --- | --- | --- |
+| `identity-preview.localsplash.dev` | `identity-preview:3200` | `127.0.0.1:13200` |
+| `aida-admin.localsplash.dev` | `aida-admin-preview:3001` | `127.0.0.1:18086` |
+| `aida-api.localsplash.dev` | `officepulse-preview:8086` **public listener only** | `127.0.0.1:18085` |
+| `echo-preview.localsplash.dev` | `echo-web-preview:3160` | `127.0.0.1:18160` |
+| `nocodb-preview.localsplash.dev` | `platform-nocodb-preview:8080` | `127.0.0.1:18087` |
+
+`localsplash.dev` is this host's configured `X.TLD`; other deployments substitute
+their own domain and configured public origins. Never proxy OfficePulse's
+private `8085` listener or publish it as a public application API.
+
+## Internal services and repository roles
+
+The shared `platform-mysql-preview:3306` engine has separate `platform_db`,
+`echo_db`, `aida_db` and `aida_admin_db` schemas and application-scoped users.
+It has no host port. OfficePulse's private API, Agent, EchoService and EchoMedia
+stay internal. Agent's explicit preview status command returns health 200 and
+readiness 503; it imports no voice SDK and does not register for jobs or contact
+providers. Authenticated media delivery enters through EchoWeb.
+
+All twelve repositories have a `dev` branch: AidaInfrastructureSetupInstructions,
+identity, AidaControl, AidaAdmin, OfficePulseAidaIntegration, AidaAgent,
+AidaHandset, EchoOrchestrator, EchoMedia, EchoDatabase, EchoWeb and EchoService.
+The branches support coordinated development and do not imply twelve server UIs.
+
+- OfficePulse owns orchestration; there is no AidaControl container.
+- Infrastructure, EchoOrchestrator and EchoDatabase provide deployment/schema
+  artifacts and have no UI container of their own.
+- AidaHandset is an Android app. Its debug APK is available to the host operator
+  at `/opt/platform-review/aida-handset-debug.apk`; it is not a production release
+  and has not completed acceptance on the physical office handset.
+
+## Data and authentication verified
+
+Identity's copied user, provider identity and eight source sessions were
+preserved before its additive migration. Exact Echo provider/subject
+reconciliation established five canonical users, three businesses and three
+owner memberships as `TENANT_ADMIN`. No email matching or new `SUPER_ADMIN`
+grants were used. The existing verified platform administrator can see all
+three businesses. Real central session handoff/introspection and authenticated
+AidaAdmin access have been exercised against the running preview.
+
+Echo preserves 45 messages and 17 media records in the copied database. Its
+running conversation/message reads and owned attachment streaming passed;
+anonymous attachment access returned 401 and a different selected business
+received 404 for the same attachment. Three organization and five user mappings
+connect these historical records to central Identity.
+
+The preview has a separate NocoDB instance with `PlatformConfig/cfg_tbl_Setting`
+and the eight canonical Aida voice tables. Live Identity settings were read and
+copied with isolated database, endpoint and trust values. Real voice routing
+configuration remains to be supplied. Preview credentials, bootstrap files,
+session tokens, mapping source records and SQL snapshots are protected host
+artifacts and are not part of this repository.
+
+A documented preview-only cookie bridge can adopt an existing browser SSO
+cookie only when it matches a nonrevoked SSO row in the copied store. It retains
+verified provider/admin provenance and writes a unique host-only preview cookie.
+This is snapshot authentication: later live logins or revocations do not
+synchronize into the preview, and preview logout does not affect live sessions.
+Fresh OAuth login requires provider registration of the preview callback, for
+example `https://identity-preview.localsplash.dev/auth/google/callback`, plus
+working NPM HTTPS. Secure browser cookies require those configured HTTPS origins.
+
+## Remaining acceptance work
+
+Supply the selected PBX and supported adapter settings, LiveKit project and
+credentials, model/voice choices, test DID and fallback, and physical handset.
+OfficePulse currently has voice disabled; Agent is explicitly status-only.
+No Asterisk vendor schema has been changed. Test actual inbound audio, live
+transcripts, takeover, failed transfer, hangup and dependency loss across two
+businesses and `SUPER_ADMIN` before declaring the voice POC complete.
+
+Echo outbound carrier sends are intentionally disabled in this preview: copied
+carrier credentials were removed and EchoService runs on an internal network
+without an external route. Existing media is mounted read-only. Copied Identity
+webhook URLs and pending deliveries were disabled before launch. A healthy
+container is not evidence of external voice or carrier acceptance.
+
+The earlier [Aida deployment template](DEV_DOCKER_DEPLOYMENT.md) remains a
+portable preparation recipe. The running preview uses its own host-local
+compositions and one shared preview MySQL engine; that template does not describe
+the deployed topology. Preserve preview volumes and source snapshots during
+rebuilds, and coordinate shared database restarts across the preview apps.

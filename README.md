@@ -29,8 +29,10 @@ supersede conflicting historical documents and issue instructions:
 2. [Platform data standard](docs/PLATFORM_DATA_STANDARD.md)
 3. [Implementation and validation sequence](docs/POC_REPOSITORY_BUILD_SEQUENCE.md)
 
-The [local readiness report](docs/LOCAL_DEV_READINESS.md) records obtained source,
-completed builds/tests, remaining deployment prerequisites and detailed reviews.
+The [running preview status](docs/DEV_PREVIEW_STATUS.md) records the launched
+containers, exact NPM destinations, preserved data and remaining voice setup.
+The [earlier readiness report](docs/LOCAL_DEV_READINESS.md) retains the initial
+implementation/build evidence and source reviews.
 
 The [original voice technical specification](docs/AIDA_VOICE_PLATFORM_TECHNICAL_SPECIFICATION.md)
 and [original POC database/interface specification](docs/AIDA_POC_DATABASE_AND_INTERFACE_SPECIFICATION.md)

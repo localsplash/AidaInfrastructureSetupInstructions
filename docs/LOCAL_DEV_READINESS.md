@@ -1,5 +1,8 @@
 # Local development readiness — 2026-09-06
 
+> Historical preparation document. The isolated preview has since launched; see
+> [running preview status](DEV_PREVIEW_STATUS.md) for its actual topology and current limits.
+
 Host: `dockerappvm01-dev`. Development domain: `localsplash.dev`.
 
 The first implementation wave is built, tested and proposed in PRs. AidaAgent and AidaHandset now have real applications. The combined platform has **not** been deployed or validated with a real PBX/LiveKit/Android call. Existing Echo, Identity and NocoDB services and their data remain unchanged.
