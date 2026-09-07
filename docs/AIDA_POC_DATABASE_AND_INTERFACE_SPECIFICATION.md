@@ -1,6 +1,8 @@
-# Aida Office POC — Database and Input Interface Specification
+# Historical Aida Office POC — Database and Input Interface Specification
 
-Status: Normative for the initial POC
+> Historical reference, superseded for implementation by the [Unified Platform Master Plan](PLATFORM_MASTER_PLAN.md), [Platform Data Standard](PLATFORM_DATA_STANDARD.md), and [POC build sequence](POC_REPOSITORY_BUILD_SEQUENCE.md). This document is not an independent normative contract. Versioned API/schema contracts must follow the accepted OfficePulse runtime and central Identity ownership before implementation.
+
+Status: Historical initial-POC proposal; not normative for the unified platform
 Platform domain: `localsplash.ai`
 PBX: OfficePulse / Asterisk 22.10.1 Realtime
 Media and voice agent: LiveKit Cloud / `aida-prime`

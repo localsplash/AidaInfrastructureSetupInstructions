@@ -1,6 +1,8 @@
-# Aida Voice Platform — Greenfield System Specification
+# Historical Aida Voice Platform — Greenfield System Specification
 
-Status: Draft for autonomous project implementation  
+> Historical reference, superseded for implementation by the [Unified Platform Master Plan](PLATFORM_MASTER_PLAN.md), [Platform Data Standard](PLATFORM_DATA_STANDARD.md), and [POC build sequence](POC_REPOSITORY_BUILD_SEQUENCE.md). The older ownership, deployment, database and hostname statements below are retained for traceability. Reuse feature details only after reconciling them with the current runtime contracts.
+
+Status: Historical draft; not the current implementation baseline
 Telephony: OfficePulse / Asterisk 22.10.1 Realtime
 Voice agent: LiveKit  
 Handset: Grandstream GXV3450 / Android 11  
