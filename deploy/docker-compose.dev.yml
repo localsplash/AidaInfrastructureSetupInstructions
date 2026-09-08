@@ -58,7 +58,7 @@ services:
       RUNTIME_MYSQL_PORT: "3306"
       RUNTIME_MYSQL_USER: aida_runtime
       RUNTIME_MYSQL_PASSWORD: ${AIDA_RUNTIME_DB_PASSWORD}
-      RUNTIME_MYSQL_DATABASE: aida_db
+      RUNTIME_MYSQL_DATABASE: aidacalls_db
       NOCODB_BASE_URL: ${NOCODB_BASE_URL:?Set the existing NocoDB URL}
       NOCODB_API_TOKEN: ${AIDA_RUNTIME_NOCODB_API_TOKEN:?Set a scoped runtime NocoDB token}
       NOCODB_BASE_NAME: PlatformConfig
@@ -106,7 +106,7 @@ services:
       PUBLIC_BASE_URL: ${AIDA_ADMIN_PUBLIC_URL:-https://aida-admin.localsplash.dev}
       SESSION_SECRET: ${AIDA_ADMIN_SESSION_SECRET:?Set a long random Admin secret}
       AIDA_ADMIN_DATABASE_URL: mysql://aida_admin:${AIDA_ADMIN_DB_PASSWORD}@aida-mysql:3306/aida_admin_db
-      OFFICEPULSE_RUNTIME_DATABASE_URL: mysql://aida_runtime_reader:${AIDA_RUNTIME_READER_DB_PASSWORD}@aida-mysql:3306/aida_db
+      OFFICEPULSE_RUNTIME_DATABASE_URL: mysql://aida_runtime_reader:${AIDA_RUNTIME_READER_DB_PASSWORD}@aida-mysql:3306/aidacalls_db
       OFFICEPULSE_PROVISIONING_BASE_URL: http://officepulse:8085
       HANDSET_PROVISIONING_URL: ${AIDA_PUBLIC_API_URL:-https://aida-api.localsplash.dev}
       NOCODB_BASE_URL: ${NOCODB_BASE_URL}

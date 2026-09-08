@@ -1,5 +1,7 @@
 # Unified office Voice and Messaging platform
 
+Current number ownership, SSO, and call-store migration: [Shared numbers rollout](SHARED_NUMBERS_ROLLOUT.md). This supersedes earlier Echo-local number authorization descriptions.
+
 Current delivery: [first-wave implementation PRs, test evidence and remaining acceptance work](LOCAL_DEV_READINESS.md). The design below is the target; it does not claim the composed POC is already deployed.
 Review date: 2026-09-06. Status: proposed implementation baseline, incorporating the owner's decisions in this review. This document describes the target and the work remaining; it is not evidence of a deployed combined POC.
 
@@ -61,7 +63,7 @@ flowchart LR
   Admin --> Config[(NocoDB PlatformConfig)]
   Identity --> Config
   Office --> Config
-  Office --> VoiceDB[(aida_db)]
+  Office --> VoiceDB[(aidacalls_db)]
   Office <--> PBX[Asterisk / OfficePulse upstream]
   PBX <--> LiveKit[LiveKit SIP and rooms]
   Office --> LiveKit
@@ -90,7 +92,7 @@ The [Platform Data Standard](PLATFORM_DATA_STANDARD.md) controls storage and mig
 | People, provider identities, SSO and application sessions, tenants, tenant memberships, Identity event outbox | `platform_db`, `identity_tbl_*` | identity only, accessed through its API |
 | Deployment configuration, credentials and Aida desired configuration | NocoDB `PlatformConfig` | identity owns base/`cfg_tbl_Setting`; each named application owns its own settings and configuration tables |
 | Messages, conversations, carrier state and legacy-to-platform mappings | `echo_db` | EchoDatabase owns DDL; EchoWeb and EchoService have explicit, limited runtime grants |
-| Calls, command ledger, event sequences, device sessions, voice provisioning state | `aida_db` | OfficePulseAidaIntegration |
+| Calls, command ledger, event sequences, device sessions, voice provisioning state | `aidacalls_db` | OfficePulseAidaIntegration |
 | AidaAdmin OAuth state, event cursor/deduplication, staff-operation audit | `aida_admin_db` | AidaAdmin; migrate existing PostgreSQL state deliberately |
 | SIP endpoint/auth/AOR records, dialplan, CDR/CEL | Existing upstream Asterisk stores | Upstream schema; OfficePulse adapter provisions only approved rows through supported interfaces |
 | Live transcript text | LiveKit delivery and handset memory for POC | Agent publishes; historical transcript storage is a separate explicit feature |
